@@ -63,7 +63,7 @@ class RFID_Authorization:
 
         self.do_print: bool = False
 
-    def get_digest(self, tag_id):           # Get expected data on the RFIC card
+    def get_digest(self, tag_id):           # Get data expected on the RFIC card
         n = int(tag_id) * self.fp           # Tag_ID * fingerprint is a secret to hash and store
         assert n / self.fp == int(tag_id)   # Check for overflow
         n_bytes = (n.bit_length() + 7) // 8                 # How many bytes we need
@@ -72,7 +72,7 @@ class RFID_Authorization:
         hash_obj.update(n_to_hash)          # Make hash
         return hash_obj.hexdigest()         # This is what should be stored on the RFID tag
 
-    def read_tag(self) -> tuple[str, str]:
+    def read_tag(self) -> tuple[str, str]:          # Read RFID tag content
         if self.do_print:
             print("Hold a tag near the reader")
         tag_id, text_raw = self.reader.read()
@@ -81,13 +81,13 @@ class RFID_Authorization:
             print(f'ID: {tag_id}\nText: {text}')
         return tag_id, text
 
-    def auth_tag(self) -> bool:
+    def auth_tag(self) -> bool:             # Check if the RFID tag contains the correct hex digest
         tag_id, text = self.read_tag()
         if text == self.get_digest(tag_id):
             return True
         else:
             return False
 
-    def write_tag(self) -> None:
+    def write_tag(self) -> None:            # Writes the correct hex digest on the RFID tag
         tag_id, text = self.read_tag()
         self.reader.write(self.get_digest(tag_id))
