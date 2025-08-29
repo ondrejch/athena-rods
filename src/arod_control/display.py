@@ -3,10 +3,10 @@
 Tools for LCD1602
 Ondrej Chvala <ochvala@utexas.edu>
 """
-import LCD1602  # LCD1602 interface
 import os
-from hwsens import get_sensors
 from datetime import datetime
+from arod_control.hwsens import get_sensors
+from arod_control import LCD1602  # LCD1602 interface
 
 
 class Display():

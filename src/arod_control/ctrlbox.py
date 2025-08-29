@@ -6,9 +6,9 @@ Ondrej Chvala <ochvala@utexas.edu>
 
 import threading
 import time
-from leds import LEDs
-from display import Display
-from authorization import RFID_Authorization, FaceAuthorization
+from arod_control.leds import LEDs
+from arod_control.display import Display
+from arod_control.authorization import RFID_Authorization, FaceAuthorization
 
 
 CB_STATE: dict = {  # Control box machine state
@@ -47,7 +47,7 @@ def run_leds():
             elif led_set == 1:
                 leds.turn_on(i_led=i)
             elif led_set == 9:
-                if leds.state(i):
+                if leds.state[i]:
                     leds.turn_off(i_led=i)
                 else:
                     leds.turn_on(i_led=i)

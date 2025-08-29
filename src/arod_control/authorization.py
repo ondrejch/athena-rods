@@ -17,7 +17,7 @@ class FaceAuthorization:
     """ Face recognition using RPi5 camera """
     def __init__(self):
         # Load known faces' embeddings
-        with open(os.path.join(os.path.expanduser('~'), 'app/face/encodings.pickle'), 'rb') as f:
+        with open(os.path.join(os.path.expanduser('~'), 'app/etc/face_rec_encodings.pickle'), 'rb') as f:
             self.data = pickle.load(f)
         # Start RPi5 camera
         self.picam2 = Picamera2()
