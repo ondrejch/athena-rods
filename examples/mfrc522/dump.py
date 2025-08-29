@@ -9,14 +9,12 @@ def main():
     print("Hold a tag near the reader")
 
     while True:
-
         # Scan for cards
         status, tag = base_rc522.mfrc522_request(base_rc522.PICC_REQIDL)
 
         # If a card is found
         if status == base_rc522.MI_OK:
             print("Card detected")
-
 
         # Get the UID of the card
         status, uid = base_rc522.mfrc522_anticoll()
@@ -39,4 +37,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

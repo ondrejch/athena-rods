@@ -19,6 +19,6 @@ def main():
         print(f'ID: {tag_id}\nText: {text}')
         sleep(1)
 
+
 if __name__ == '__main__':
     main()
-
