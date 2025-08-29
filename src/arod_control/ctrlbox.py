@@ -4,6 +4,7 @@ Main loop for the control box RPi5
 Ondrej Chvala <ochvala@utexas.edu>
 """
 
+import logging
 import threading
 import time
 from arod_control.leds import LEDs
@@ -34,10 +35,37 @@ CB_STATE: dict = {  # Control box machine state
 
 APPROVED_USER_NAMES: list[str] = ['Ondrej Chvala']
 
+# LOGGER
+logger = logging.getLogger('ACBox')  # ATHENA rods Control Box
+logger.setLevel(logging.DEBUG)
+
+# Formatter for logging messages
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# File handler logs DEBUG and above
+file_handler = logging.FileHandler('ATHENA_controller.log')
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(formatter)
+
+# Console handler logs INFO and above
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(formatter)
+
+# Add handlers to logger
+logger.addHandler(file_handler)
+logger.addHandler(console_handler)
+
+# Usage examples
+# logger.debug('This will go to the log file, but not the console')
+# logger.info('This will go to both the log file and the console')
+# logger.error('This will go to both the log file and the console')
+
 
 def run_leds():
     """ Thread that manages state of LEDs """
     leds = LEDs()
+    logger.info('LEDs thread initialized')
     while True:
         time.sleep(CB_STATE['refresh']['leds'])
         for i, led_set in enumerate(CB_STATE['leds']):
@@ -56,11 +84,13 @@ def run_leds():
 def run_display():
     """ Thread that manages the LCD display """
     display = Display()
+    logger.info('LCD display thread initialized')
     while True:
         time.sleep(CB_STATE['refresh']['display'])
         if CB_STATE['message']['text']:
             display.show_message(CB_STATE['message']['text'])
             time.sleep(CB_STATE['message']['timer'])
+            logger.info(f"LCD display: show message {CB_STATE['message']['text']} for {CB_STATE['message']['timer']} sec")
         else:
             display.show_sensors()
 
@@ -69,12 +99,13 @@ def run_auth():
     """ Thread that manages authorization """
     face_auth = FaceAuthorization()
     rfid_auth = RFID_Authorization()
-
+    logger.info('Autorization thread initialized')
     while True:
         while not CB_STATE['auth']['face']:     # 1. Wait for face authorization
             detected_name = face_auth.scan_face()
             if detected_name in APPROVED_USER_NAMES:
                 CB_STATE['auth']['face'] = detected_name
+                logger.info(f'Autorization: athorized {detected_name} by face')
             time.sleep(2)
 
         CB_STATE['message']['text'] = f"Authorized user\n{CB_STATE['auth']['face']}"
@@ -120,4 +151,6 @@ def main_loop():
 
 
 if __name__ == "__main__":
+    logger.info(f"*** ATHENA rods Control Box started ***")
     main_loop()
+
