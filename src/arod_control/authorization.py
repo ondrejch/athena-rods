@@ -75,14 +75,15 @@ class RFID_Authorization:
     def read_tag(self) -> tuple[str, str]:
         if self.do_print:
             print("Hold a tag near the reader")
-        tag_id, text = self.reader.read()
+        tag_id, text_raw = self.reader.read()
+        text = text_raw.strip()
         if self.do_print:
             print(f'ID: {tag_id}\nText: {text}')
         return tag_id, text
 
     def auth_tag(self) -> bool:
         tag_id, text = self.read_tag()
-        if text.strip() == self.get_digest(tag_id):
+        if text == self.get_digest(tag_id):
             return True
         else:
             return False
