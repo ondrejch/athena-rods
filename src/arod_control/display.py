@@ -13,7 +13,7 @@ class Display():
     def __init__(self):
         # Initialize LCD with I2C address 0x27 and enable backlight
         LCD1602.init(0x27, 1)
-        LCD1602.write(0, 0, f' ** ATHENA rods **'.ljust(16))
+        LCD1602.write(0, 0, f'** ATHENArods **'.ljust(16))
         LCD1602.write(0, 1, datetime.now().isoformat().ljust(16))
 
     def show_sensors(self):
