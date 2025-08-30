@@ -1,2 +1,0 @@
-arod_control
-mfrc522

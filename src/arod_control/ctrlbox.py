@@ -15,12 +15,12 @@ from arod_control.authorization import RFID_Authorization, FaceAuthorization
 CB_STATE: dict = {  # Control box machine state
     'auth': {       # Authorization status
         'face': '',
-        'rfid': False
+        'rfid': ''
     },
     'refresh': {    # Refresh rate for loops [s]
-        'leds':  2,     # LED
-        'display': 2,   # LCD
-        'rfid': 120,    # RFID authorization
+        'leds':  1,     # LED
+        'display': 1,   # LCD
+        'rfid': 15*60,  # RFID authorization
         'as_1': 0.1     #
     },
     'leds': [9, 9, 9],  # 0 - off, 1 - on, 9 - flashing
@@ -49,7 +49,8 @@ file_handler.setFormatter(formatter)
 
 # Console handler logs INFO and above
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
+#console_handler.setLevel(logging.INFO)
+console_handler.setLevel(logging.DEBUG)
 console_handler.setFormatter(formatter)
 
 # Add handlers to logger
@@ -70,9 +71,9 @@ def run_leds():
         time.sleep(CB_STATE['refresh']['leds'])
         for i, led_set in enumerate(CB_STATE['leds']):
             # print(i, led_set)
-            if led_set == 0:
+            if led_set == 1:    # The LEDs are flipped polarity
                 leds.turn_off(i_led=i)
-            elif led_set == 1:
+            elif led_set == 0:
                 leds.turn_on(i_led=i)
             elif led_set == 9:
                 if leds.state[i]:
@@ -86,40 +87,53 @@ def run_display():
     display = Display()
     logger.info('LCD display thread initialized')
     while True:
+        message = CB_STATE['message']['text']
         time.sleep(CB_STATE['refresh']['display'])
-        if CB_STATE['message']['text']:
-            display.show_message(CB_STATE['message']['text'])
-            time.sleep(CB_STATE['message']['timer'])
-            logger.info(f"LCD display: show message {CB_STATE['message']['text']} for {CB_STATE['message']['timer']} sec")
+        if message:
+            display.show_message(message)
+            message = message.replace("\n"," \\\\ ")
+            logger.info(f"LCD display: show message {message} for {CB_STATE['message']['timer']} sec")
+            CB_STATE['message']['text'] = ''
+            time.sleep(CB_STATE['message']['timer'] - CB_STATE['refresh']['display'])
         else:
             display.show_sensors()
 
 
 def run_auth():
     """ Thread that manages authorization """
-    face_auth = FaceAuthorization()
     rfid_auth = RFID_Authorization()
+    face_auth = FaceAuthorization()
     logger.info('Autorization thread initialized')
     while True:
         while not CB_STATE['auth']['face']:     # 1. Wait for face authorization
             detected_name = face_auth.scan_face()
             if detected_name in APPROVED_USER_NAMES:
                 CB_STATE['auth']['face'] = detected_name
-                logger.info(f'Autorization: athorized {detected_name} by face')
-            time.sleep(2)
+                logger.info(f'Autorization: authorized user {detected_name} by face')
+            else:
+                time.sleep(2)
 
         CB_STATE['message']['text'] = f"Authorized user\n{CB_STATE['auth']['face']}"
         CB_STATE['message']['timer'] = 5
-        CB_STATE['leds'][2] = 0
+        CB_STATE['leds'][1] = 0
 
-        while not rfid_auth.auth_tag():         # 2. Wait for RFID authorization
-            time.sleep(2)
+        logger.info(f"RFID: {CB_STATE['auth']['rfid']}")
+        while not CB_STATE['auth']['rfid']:     # 2. Wait for RFID authorizationa
+            (tag_id, tag_t) = rfid_auth.read_tag()
+            logger.debug(f"tag_id, tag_t: {tag_id}, {tag_t}")
+            if rfid_auth.auth_tag():
+                CB_STATE['auth']['rfid'] = tag_id
+                logger.debug(f"auth ok")
+            else:
+                logger.info(f'Authorization: RFID failed')
+                time.sleep(2)
 
-        CB_STATE['message']['text'] = f"RFID token authorized\nOK for 15 minutes!"
+        logger.info(f"Authorization: RFID {CB_STATE['auth']['rfid']} token authorized, OK for {CB_STATE['refresh']['rfid']//60} minutes!")
+        CB_STATE['message']['text'] = f"RFID authorized\nOK for {CB_STATE['refresh']['rfid']//60} mins!"
         CB_STATE['message']['timer'] = 5
-        CB_STATE['leds'][2] = 1
+        CB_STATE['leds'][1] = 1
 
-        time.sleep(15 * 60)                     # 3. Auth re-checking
+        time.sleep(CB_STATE['refresh']['rfid']) # 3. Auth re-checking
         attempts = 5                            # RFID re-authenticate trials
 
         CB_STATE['leds'][2] = 0
@@ -132,6 +146,7 @@ def run_auth():
 
         CB_STATE['leds'][2] = 9                 # Reset authorization requirement
         CB_STATE['auth']['face'] = ''
+        logger.info(f"Authorization: RFID re-authorization failed, resetting to unauthorized!")
 
 
 def main_loop():
@@ -142,11 +157,13 @@ def main_loop():
     display_thread = threading.Thread(target=run_display)
     display_thread.daemon = True
     display_thread.start()
+    time.sleep(2)
     auth_thread = threading.Thread(target=run_auth)
     auth_thread.daemon = True
     auth_thread.start()
 
     while True:
+        time.sleep(5)
         pass
 
 

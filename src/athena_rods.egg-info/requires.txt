@@ -1,6 +1,0 @@
-face_recognition
-gpiozero
-opencv-python
-picamera2
-python-sensors
-spidev

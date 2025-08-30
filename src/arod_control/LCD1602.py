@@ -61,7 +61,7 @@ def init(addr=None, bl=1):
 	global BLEN
 
 	i2c_list = i2c_scan()
-	print(f"i2c_list: {i2c_list}")
+	# print(f"i2c_list: {i2c_list}")
 
 	if addr is None:
 		if '27' in i2c_list:
@@ -74,7 +74,7 @@ def init(addr=None, bl=1):
 		LCD_ADDR = addr
 		if str(hex(addr)).strip('0x') not in i2c_list:
 			raise IOError(f"I2C address {str(hex(addr))} or 0x3f no found.")
-		
+
 	BLEN = bl
 	try:
 		send_command(0x33) # Must initialize to 8-line mode at first
