@@ -9,7 +9,6 @@ import threading
 import time
 import socket
 import json
-import struct
 from arod_control.leds import LEDs
 from arod_control.display import Display
 from arod_control.authorization import RFID_Authorization, FaceAuthorization

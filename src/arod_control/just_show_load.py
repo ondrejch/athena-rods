@@ -6,7 +6,6 @@ Ondrej Chvala <ochvala@utexas.edu>
 
 import threading
 import time
-from arod_control.leds import LEDs
 from arod_control.display import Display
 
 
@@ -33,4 +32,3 @@ def main_loop():
 
 if __name__ == "__main__":
     main_loop()
-
