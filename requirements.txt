@@ -4,3 +4,4 @@ picamera2
 python-sensors
 gpiozero
 spidev
+dash

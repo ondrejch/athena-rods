@@ -7,15 +7,20 @@ Ondrej Chvala <ochvala@utexas.edu>
 import logging
 import threading
 import time
+import socket
+import json
+import struct
 from arod_control.leds import LEDs
 from arod_control.display import Display
 from arod_control.authorization import RFID_Authorization, FaceAuthorization
+from arod_control import PORT_CTRL, PORT_STREAM     # Socket settings
 
 
 CB_STATE: dict = {  # Control box machine state
     'auth': {       # Authorization status
         'face': '',
-        'rfid': ''
+        'rfid': '',
+        'disp': False   # Is display computer alllowed to connect?
     },
     'refresh': {    # Refresh rate for loops [s]
         'leds':  1,     # LED
@@ -29,7 +34,10 @@ CB_STATE: dict = {  # Control box machine state
         'timer': 2      # for how long [s]
     },
     'as_1': {     # Synchronized machine state with actuator/sensor box1
-        'distance': -1,  # Ultrasound distance measurement
+        'distance': -1.0,   # Ultrasound distance measurement [float]
+        'motor': 0,         # AROD motor down, stop, up [-1, 0, 1]
+        'servo': 0,         # Servo engaging [0, 1]
+        'bswitch': 0        # Bottom switch pressed [0, 1]
     }
 }
 
@@ -57,10 +65,87 @@ console_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
-# Usage examples
-# logger.debug('This will go to the log file, but not the console')
-# logger.info('This will go to both the log file and the console')
-# logger.error('This will go to both the log file and the console')
+# SOCKET communications setup
+connections = {
+    "stream_instr": None,
+    "stream_display": None,
+    "ctrl_instr": None,
+    "ctrl_display": None,
+}
+lock = threading.Lock()
+
+
+def accept_connections(server, role, conn_key):
+    """ Socket communication: accepting client connections """
+    while True:
+        conn, addr = server.accept()
+        try:
+            handshake = conn.recv(32).decode('utf-8').strip()
+        except Exception:
+            conn.close()
+            continue
+        # Authorization check for display clients only
+        if role.startswith("stream_display") or role.startswith("ctrl_display"):
+            if not CB_STATE['auth']['disp']:
+                logger.info(f"Rejected {role} connection from {addr} due to AUTH=False")
+                conn.sendall(b'REJECT:UNAUTHORIZED\n')
+                conn.close()
+                continue
+        if handshake != role:
+            conn.close()
+            continue
+        with lock:
+            connections[conn_key] = conn
+        logger.info(f"Socket connection: {role} connected from {addr}")
+
+
+def forward_stream(src_key, dst_key):
+    """ Socket communication: forwarding stream from Instrumentation to Display computers """
+    while True:
+        with lock:
+            src_sock = connections.get(src_key)
+            dst_sock = connections.get(dst_key)
+        if not src_sock or not dst_sock:
+            continue
+        try:
+            data = src_sock.recv(8)  # 2 floats, neutron_density and reactivity
+            if not data:
+                break
+            dst_sock.sendall(data)
+        except Exception as e:
+            logger.info(f"Stream {src_key} to {dst_key} error:", e)
+            break
+
+
+def forward_ctrl(src_key, dst_key):
+    """ Socket communication: Forwarding JSON-formatted messages """
+    buffer = b""
+    while True:
+        with lock:
+            src_sock = connections.get(src_key)
+            dst_sock = connections.get(dst_key)
+        if not src_sock or not dst_sock:
+            continue
+        try:
+            msg = src_sock.recv(1024)
+            if not msg:
+                break
+            buffer += msg
+            while b'\n' in buffer:
+                line, buffer = buffer.split(b'\n', 1)
+                try:
+                    json.loads(line.decode('utf-8'))  # parse, just check validity
+                    dst_sock.sendall(line + b'\n')
+                except json.JSONDecodeError:
+                    # Invalid JSON, skip this line
+                    logger.info(f"Invalid JSON received on {src_key}: {line}")
+                    continue
+                except Exception as e:
+                    logger.info(f"Unexpected exception in forward_ctrl JSON parse: {e}")
+                    continue
+        except Exception as e:
+            logger.info(f"Control {src_key} to {dst_key} error: {e}")
+            break
 
 
 def run_leds():
@@ -103,13 +188,13 @@ def run_auth():
     """ Thread that manages authorization """
     rfid_auth = RFID_Authorization()
     face_auth = FaceAuthorization()
-    logger.info('Autorization thread initialized')
+    logger.info('Authorization thread initialized')
     while True:
         while not CB_STATE['auth']['face']:     # 1. Wait for face authorization
             detected_name = face_auth.scan_face()
             if detected_name in APPROVED_USER_NAMES:
                 CB_STATE['auth']['face'] = detected_name
-                logger.info(f'Autorization: authorized user {detected_name} by face')
+                logger.info(f'Authorization: authorized user {detected_name} by face')
             else:
                 time.sleep(2)
 
@@ -118,7 +203,7 @@ def run_auth():
         CB_STATE['leds'][1] = 0
 
         logger.info(f"RFID: {CB_STATE['auth']['rfid']}")
-        while not CB_STATE['auth']['rfid']:     # 2. Wait for RFID authorizationa
+        while not CB_STATE['auth']['rfid']:     # 2. Wait for RFID authorization
             (tag_id, tag_t) = rfid_auth.read_tag()
             logger.debug(f"tag_id, tag_t: {tag_id}, {tag_t}")
             if rfid_auth.auth_tag():
@@ -132,6 +217,7 @@ def run_auth():
         CB_STATE['message']['text'] = f"RFID authorized\nOK for {CB_STATE['refresh']['rfid']//60} mins!"
         CB_STATE['message']['timer'] = 5
         CB_STATE['leds'][1] = 1
+        CB_STATE['auth']['disp'] = True
 
         time.sleep(CB_STATE['refresh']['rfid']) # 3. Auth re-checking
         attempts = 5                            # RFID re-authenticate trials
@@ -139,28 +225,62 @@ def run_auth():
         CB_STATE['leds'][2] = 0
         for i in range(attempts):
             if rfid_auth.auth_tag():
+                CB_STATE['auth']['disp'] = True
                 CB_STATE['leds'][2] = 1
                 break
             else:
                 time.sleep(2)
 
-        CB_STATE['leds'][2] = 9                 # Reset authorization requirement
-        CB_STATE['auth']['face'] = ''
-        logger.info(f"Authorization: RFID re-authorization failed, resetting to unauthorized!")
+        if CB_STATE['leds'][2] == 0:            # Reset authorization requirement
+            CB_STATE['leds'][2] = 9
+            CB_STATE['auth']['face'] = ''
+            CB_STATE['auth']['disp'] = False
+            logger.info(f"Authorization: RFID re-authorization failed, resetting to unauthorized!")
 
 
 def main_loop():
     # Start all threads
+
+    # LED driver
     led_thread = threading.Thread(target=run_leds)
     led_thread.daemon = True
     led_thread.start()
+
+    # LCD driver
     display_thread = threading.Thread(target=run_display)
     display_thread.daemon = True
     display_thread.start()
     time.sleep(2)
+
+    # Authorization
     auth_thread = threading.Thread(target=run_auth)
     auth_thread.daemon = True
     auth_thread.start()
+
+    # Stream sockets
+    HOST = '0.0.0.0'  # Localhost
+    server_stream = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_stream.bind((HOST, PORT_STREAM))
+    server_stream.listen(5)
+    logger.info(f"Control computer listening for streaming on {PORT_STREAM}")
+
+    # Control sockets
+    server_ctrl = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_ctrl.bind((HOST, PORT_CTRL))
+    server_ctrl.listen(5)
+    logger.info(f"Control computer listening for messages on {PORT_STREAM}")
+
+    # Socket connection threads
+    threading.Thread(target=accept_connections, args=(server_stream, "stream_instr", "stream_instr"), daemon=True).start()
+    threading.Thread(target=accept_connections, args=(server_stream, "stream_display", "stream_display"), daemon=True).start()
+    threading.Thread(target=accept_connections, args=(server_ctrl, "ctrl_instr", "ctrl_instr"), daemon=True).start()
+    threading.Thread(target=accept_connections, args=(server_ctrl, "ctrl_display", "ctrl_display"), daemon=True).start()
+
+    # Socket communication threads
+    threading.Thread(target=forward_stream, args=("stream_instr", "stream_display"), daemon=True).start()
+    threading.Thread(target=forward_stream, args=("stream_display", "stream_instr"), daemon=True).start()
+    threading.Thread(target=forward_ctrl, args=("ctrl_instr", "ctrl_display"), daemon=True).start()
+    threading.Thread(target=forward_ctrl, args=("ctrl_display", "ctrl_instr"), daemon=True).start()
 
     while True:
         time.sleep(5)
@@ -170,4 +290,3 @@ def main_loop():
 if __name__ == "__main__":
     logger.info(f"*** ATHENA rods Control Box started ***")
     main_loop()
-
