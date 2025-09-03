@@ -20,9 +20,7 @@ while True:
         name = "Unknown"
         if True in matches:
             matchedIdxs = [i for (i, b) in enumerate(matches) if b]
-            counts = {}
-            for i in matchedIdxs:
-                counts[data["names"][i]] = counts.get(data["names"][i], 0) + 1
+            counts = {data["names"][i]: counts.get(data["names"][i], 0) + 1 for i in matchedIdxs}
             name = max(counts, key=counts.get)
         top, right, bottom, left = box
         cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
