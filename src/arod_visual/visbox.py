@@ -49,7 +49,7 @@ def stream_receiver(sock):
             data = sock.recv(8)
             if not data or len(data) < 8:
                 break
-            neutron_density, position = struct.unpack('!ff', data)
+            neutron_density, rho, position = struct.unpack('!fff', data)
             stream_data_q.put((neutron_density, position))
     except Exception as e:
         print("Stream receive error:", e)

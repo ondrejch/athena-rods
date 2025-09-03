@@ -14,7 +14,7 @@ import threading
 import numpy as np
 from arod_control import PORT_CTRL, PORT_STREAM, CONTROL_IP
 from devices import get_dht, get_distance, speed_of_sound, motor, sonar
-from pke import PointKineticsEquationSolver
+from pke import PointKineticsEquationSolver, ReactorPowerCalculator
 
 # LOGGER
 logger = logging.getLogger('AIBox')  # ATHENA rods Control Box
@@ -39,7 +39,7 @@ logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
 
-class Reactivity(threading.Thread):
+class Reactivity:
     """ Control rod reactivity class """
     def __init__(self):
         super().__init__()
@@ -47,6 +47,7 @@ class Reactivity(threading.Thread):
         self.cr_max: float = 15.0   # Rod maximum controlled position [cm]
         self.delta_rho: float = 800.0e-5  # Range of reactivity covered, 800 pcm by default
         self.cr_pos = get_distance  # CR position from sonar
+        self.distance: float = -999.9  # Current CR position [cm]
         assert self.cr_min < self.cr_max
 
     @property
@@ -60,7 +61,8 @@ class Reactivity(threading.Thread):
 
     def get_reactivity(self) -> float:
         """ Reads sonar distance, turns it into reactivity """
-        return (self.cr_pos() - self.cr_zero_rho) * self.delta_rho / self.cr_delta
+        self.distance = self.cr_pos()
+        return (self.distance - self.cr_zero_rho) * self.delta_rho / self.cr_delta
 
 
 def set_speed_of_sound():
@@ -82,7 +84,7 @@ def update_speed_of_sound(wait: float = 10 * 60):
         time.sleep(wait)
 
 
-def connect_with_retry(host, port, handshake, delay=5):
+def connect_with_retry(host, port, handshake, delay=1, max_retries=None):
     """Connect to a server with retry logic using a handshake protocol.
     Parameters:
         - host (str): The server host to connect to.
@@ -91,6 +93,9 @@ def connect_with_retry(host, port, handshake, delay=5):
         - delay (int, optional): The delay in seconds between retry attempts (default is 5).
     Returns:
         - socket: The connected socket object upon successful connection."""
+    attempts = 0
+    current_delay = delay
+
     while True:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -100,15 +105,55 @@ def connect_with_retry(host, port, handshake, delay=5):
             return s
         except Exception as e:
             logger.info(f"Retrying connection to {handshake} on {host}:{port}. Reason: {e}")
-            time.sleep(delay)
+            if s:
+                try:
+                    s.close()
+                except Exception as close_exc:
+                    logger.warning(f"Error closing socket after failed connect attempt: {close_exc}")
+
+            attempts += 1
+            if max_retries is not None and attempts >= max_retries:
+                logger.error(f"Max retries reached ({max_retries}), stopping connection attempts.")
+                raise ConnectionError(f"Could not connect to {host}:{port} after {max_retries} attempts.") from e
+
+            time.sleep(current_delay)
+            # Exponential backoff logic:
+            current_delay = min(current_delay * 2, 60)  # max 60 seconds delay after doubling
 
 
-def stream_sender(sock):
+def stream_sender(sock, power_calculator, cr_reactivity, update_event):
     while True:
-        neutron_density = random.uniform(0, 100)
-        position = random.uniform(-10, 10)
-        sock.sendall(struct.pack('!ff', neutron_density, position))
-        time.sleep(1)
+        update_event.wait()  # Wait until power_calculator signals data ready
+        neutron_density = power_calculator.current_neutron_density
+        rho = power_calculator.current_rho
+        distance = cr_reactivity.distance
+        try:
+            sock.sendall(struct.pack('!fff', neutron_density, rho, distance))
+        except Exception as e:
+            logger.error(f"stream_sender error: {e}")
+            # Attempt to reconnect before retrying send
+            while True:
+                try:  # Close current socket safely
+                    sock.close()
+                except Exception as close_exc:
+                    logger.warning(f"Error closing socket during reconnect: {close_exc}")
+
+                try:
+                    logger.info("stream_sender attempting to reconnect...")
+                    sock = connect_with_retry(CONTROL_IP, PORT_STREAM, "stream_instr")
+                    logger.info("stream_sender reconnected.")
+                    break  # Exit reconnect loop
+                except Exception as conn_exc:
+                    logger.error(f"stream_sender reconnect failed: {conn_exc}")
+                    time.sleep(2)  # wait before retrying reconnection
+
+            # After reconnect, send the current data before continuing loop
+            try:
+                sock.sendall(struct.pack('!fff', neutron_density, rho, distance))
+            except Exception as send_exc:
+                logger.error(f"stream_sender send after reconnect failed: {send_exc}")
+
+        update_event.clear()
 
 
 def ctrl_sender(sock):
@@ -149,16 +194,22 @@ def main():
         None
     Returns:
         None: This function does not return any value."""
+    logger.info("Instrumentation computer started.")
     threading.Thread(target=update_speed_of_sound, daemon=True).start()
 
     stream_sock = connect_with_retry(CONTROL_IP, PORT_STREAM, "stream_instr")
     ctrl_sock = connect_with_retry(CONTROL_IP, PORT_CTRL, "ctrl_instr")
 
-    threading.Thread(target=stream_sender, args=(stream_sock,), daemon=True).start()
     threading.Thread(target=ctrl_sender, args=(ctrl_sock,), daemon=True).start()
     threading.Thread(target=ctrl_receiver, args=(ctrl_sock,), daemon=True).start()
 
-    logger.info("Instrumentation computer running.")
+    cr_reactivity = Reactivity()
+    update_event = threading.Event()
+    power_calculator = ReactorPowerCalculator(cr_reactivity.get_reactivity, dt=0.1, update_event=update_event)
+    power_calculator.start()
+    threading.Thread(target=stream_sender, args=(stream_sock, power_calculator, cr_reactivity, update_event),
+                     daemon=True).start()
+
     while True:
         time.sleep(5)
 

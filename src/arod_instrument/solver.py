@@ -43,7 +43,9 @@ class PointKineticsEquationSolver:
         self.beta = params['beta']
         self.lambda_ = params['lambda_']
         self.Lambda = params['Lambda']
+        # Precompute constants for speed
         self.beta_total = np.sum(self.beta)
+        self.beta_div_Lambda = self.beta / self.Lambda
         self._validate_parameters()
         self.reactivity_func = reactivity_func
         if source_func is None:
@@ -55,16 +57,20 @@ class PointKineticsEquationSolver:
         if len(self.params['beta']) != len(self.params['lambda_']) or len(self.params['beta']) < 1:
             raise ValueError("Beta and lambda arrays must have equal length")
 
-    def solve(self, t_span=(0, 10), t_eval=None):
+    def solve(self, t_span=(0, 10), t_eval=None, y0_override=None):
         """Solve the point kinetics equations"""
         beta = self.params['beta']
         lambda_ = self.params['lambda_']
         Lambda = self.params['Lambda']
+        beta_sum: float = self.beta_total
+        beta_div_Lambda = self.beta_div_Lambda
 
-        # Initial conditions (steady-state)
-        n0 = 1.0
-        C0 = beta / (lambda_ * Lambda) * n0
-        y0 = np.concatenate(([n0], C0))
+        if y0_override is not None:
+            y0 = y0_override
+        else:        # Initial conditions (steady-state)
+            n0 = 1.0
+            C0 = beta / (lambda_ * Lambda) * n0
+            y0 = np.concatenate(([n0], C0))
 
         def equations(t, y):
             """Calculate the rate of change in neutron population and precursor concentrations over time.
@@ -73,15 +79,17 @@ class PointKineticsEquationSolver:
                 - y (list): Contains neutron density and concentrations of delayed neutron precursors.
             Returns:
                 - list: A list comprising the rate of change of neutron density followed by the rates of change of each precursor concentration."""
-            n, *C = y
+            n = y[0]
+            C = np.array(y[1:])  # vectorize precursor concentrations
             rho = self.reactivity_func(t)       # External reactivity
             Q = self.source_func(t)             # External neutron source
-            prompt = (rho - beta.sum()) / Lambda
+            prompt = (rho - beta_sum) / Lambda
             delayed = np.dot(lambda_, C)
 
             dndt = n * prompt + delayed + Q
-            dCdt = [beta[i] / Lambda * n - lambda_[i] * C[i] for i in range(len(C))]
-            return [dndt] + dCdt
+            # dCdt = [beta[i] / Lambda * n - lambda_[i] * C[i] for i in range(len(C))]
+            dCdt = beta_div_Lambda * n - lambda_ * np.array(C)  # Numpy vectorization
+            return np.concatenate(([dndt], dCdt))
 
         self.solution = solve_ivp(equations, t_span, y0, method='RK45', t_eval=t_eval, rtol=1e-6, atol=1e-8)
         return self.solution.t, self.solution.y[0], self.solution.y[1:]
