@@ -236,7 +236,7 @@ class StoreMFRC522(SimpleMFRC522):
             raise ValueError("Password must be a list of 6 integers (0-255)")
 
         access_bits = [0xFF, 0x07, 0x80, 0x69]
-        if password == [0, 0, 0, 0, 0, 0] or password == DEFAULT_KEYS:  # Set default password
+        if password in ([0, 0, 0, 0, 0, 0], DEFAULT_KEYS):  # Set default password
             password = DEFAULT_KEYS
         trailer_data = bytes(password + access_bits + password)
         print(f'writing password: {password}')
