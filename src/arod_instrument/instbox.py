@@ -83,6 +83,14 @@ def update_speed_of_sound(wait: float = 10 * 60):
 
 
 def connect_with_retry(host, port, handshake, delay=5):
+    """Connect to a server with retry logic using a handshake protocol.
+    Parameters:
+        - host (str): The server host to connect to.
+        - port (int): The port number on the server host.
+        - handshake (str): The handshake message to initiate the connection.
+        - delay (int, optional): The delay in seconds between retry attempts (default is 5).
+    Returns:
+        - socket: The connected socket object upon successful connection."""
     while True:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -112,6 +120,11 @@ def ctrl_sender(sock):
 
 
 def ctrl_receiver(sock):
+    """Receive and log control settings from a socket connection.
+    Parameters:
+        - sock (socket.socket): A socket object to receive data from.
+    Returns:
+        - None: This function does not return any value; it processes and logs incoming data."""
     buffer = b""
     while True:
         msg = sock.recv(1024)
@@ -131,6 +144,11 @@ def ctrl_receiver(sock):
 
 
 def main():
+    """Starts multiple threads to handle the communication and updates for an instrumentation system.
+    Parameters:
+        None
+    Returns:
+        None: This function does not return any value."""
     threading.Thread(target=update_speed_of_sound, daemon=True).start()
 
     stream_sock = connect_with_retry(CONTROL_IP, PORT_STREAM, "stream_instr")

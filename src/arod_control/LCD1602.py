@@ -7,6 +7,12 @@ import subprocess
 BUS = smbus.SMBus(1)
 
 def write_word(addr, data):
+	"""Write a word to a specified address with optional bit adjustment based on global BLEN setting.
+	Parameters:
+	- addr (int): The address to which the data should be written.
+	- data (int): The data value to be written, which may be modified based on BLEN.
+	Returns:
+	- None: This function does not return a value."""
 	global BLEN
 	temp = data
 	if BLEN == 1:
@@ -17,6 +23,11 @@ def write_word(addr, data):
 
 def send_command(comm):
 	# Send bit7-4 firstly
+	"""Sends a command to an LCD over I2C by splitting it into two 4-bit transfers.
+	Parameters:
+	- comm (int): The command byte to be sent to the LCD.
+	Returns:
+	- None: This function does not return a value."""
 	buf = comm & 0xF0
 	buf |= 0x04               # RS = 0, RW = 0, EN = 1
 	write_word(LCD_ADDR ,buf)
@@ -34,6 +45,11 @@ def send_command(comm):
 
 def send_data(data):
 	# Send bit7-4 firstly
+	"""Sends 8-bit data to the LCD by writing high and low nibble separately.
+	Parameters:
+	- data (int): 8-bit data value to be sent to the LCD.
+	Returns:
+	- None: This function does not return any value."""
 	buf = data & 0xF0
 	buf |= 0x05               # RS = 1, RW = 0, EN = 1
 	write_word(LCD_ADDR ,buf)
@@ -57,6 +73,12 @@ def i2c_scan():
     return i2c_list
 
 def init(addr=None, bl=1):
+	"""Initializes the LCD with the specified I2C address and backlight setting.
+	Parameters:
+	- addr (int, optional): I2C address of the LCD. Defaults to None, which attempts to auto-detect address 0x27 or 0x3f.
+	- bl (int): Backlight setting, where 1 is on and 0 is off. Defaults to 1.
+	Returns:
+	- bool: True if initialization is successful, otherwise False."""
 	global LCD_ADDR
 	global BLEN
 
@@ -100,6 +122,13 @@ def openlight():  # Enable the backlight
 	BUS.close()
 
 def write(x, y, str):
+	"""Positions the cursor at coordinates (x, y) on a display and writes a given string.
+	Parameters:
+	- x (int): The horizontal position on the display, limited to the range 0-15.
+	- y (int): The vertical position on the display, limited to the range 0-1.
+	- str (str): The string to be written starting at position (x, y).
+	Returns:
+	- None: The function sends data to the display without returning a value."""
 	if x < 0:
 		x = 0
 	if x > 15:

@@ -5,7 +5,24 @@ from solver import PointKineticsEquationSolver
 
 
 class ReactorPowerCalculator(threading.Thread):
+    """Initializes an instance of a class to manage reactor kinetics simulation.
+    Parameters:
+        - get_reactivity (callable): A function that returns the reactivity at a given time.
+        - dt (float, optional): The time step for the simulation. Default is 0.1.
+        - duration (float, optional): The total time for which the simulation runs. Default is None.
+    Processing Logic:
+        - A threading.Event object is used to manage when the simulation should stop.
+        - Simulation calculates neutron density over the specified time, dependent on reactor reactivity.
+        - Results are stored as time, reactivity, and neutron density.
+        - Maintains real-time pacing by sleeping for the precise required duration."""
     def __init__(self, get_reactivity, dt=0.1, duration=None):
+        """Initializes an instance of a class to manage reactor kinetics simulation.
+        Parameters:
+            - get_reactivity (callable): A function that returns the reactivity at a given time.
+            - dt (float, optional): The time step for the simulation. Default is 0.1.
+            - duration (float, optional): The total time for which the simulation runs. Default is None.
+        Returns:
+            - None: This is an initializer and does not return a value."""
         super().__init__()
         self.get_reactivity = get_reactivity
         self.dt = dt
@@ -17,6 +34,12 @@ class ReactorPowerCalculator(threading.Thread):
         self.solver = PointKineticsEquationSolver(lambda t: 0.0)
 
     def run(self):
+        """Execute a time-dependent simulation of neutron density in nuclear reactor kinetics.
+        Parameters:
+            None
+        Returns:
+            None: The function does not return a value but prints real-time simulation results and appends them to the results list.
+        This function runs a simulation to solve equations for neutron density over specified time intervals. It fetches initial steady-state conditions using solver parameters, computes neutron density, and prints the output in real-time pacing, simulating how neutron density changes over time within a nuclear reactor."""
         beta = None
         lambda_ = None
         Lambda = None

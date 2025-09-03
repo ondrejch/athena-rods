@@ -29,6 +29,20 @@ from gpiozero import DigitalOutputDevice
 
 
 class MFRC522:
+    """
+    A class for interfacing with the MFRC522 RFID reader through SPI communication.
+    Parameters:
+        - bus (int): The SPI bus number to use.
+        - device (int): The SPI device number on the bus.
+        - spd (int): The maximum SPI speed in Hertz.
+        - pin_rst (int): The GPIO pin used for resetting the device.
+        - debug_level (str): The logging level for debugging purposes.
+    Processing Logic:
+        - The class provides methods for controlling the MFRC522 including resetting, starting and stopping the antenna, card authentication, and sector data reading and writing.
+        - Methods translate high-level operations into specific card commands and SPI transactions.
+        - Executes CRC calculations using hardware for reliability and speed.
+        - Handles errors and collisions in RFID communication, ensuring robust data exchange.
+    """
     MAX_LEN = 16
 
     PCD_IDLE = 0x00
@@ -128,6 +142,15 @@ class MFRC522:
     SERNUM = []
 
     def __init__(self, bus=0, device=0, spd=1000000, pin_rst=22, debug_level="WARNING"):
+        """Initialize the instance with specific SPI and logging configurations.
+        Parameters:
+            - bus (int): The SPI bus number to use.
+            - device (int): The SPI device number on the bus.
+            - spd (int): The maximum SPI speed in Hertz.
+            - pin_rst (int): The GPIO pin used for resetting the device.
+            - debug_level (str): The logging level for debugging purposes.
+        Returns:
+            - None: This is a constructor method and does not return any value."""
         self.spi = spidev.SpiDev()
         self.spi.open(bus, device)
         self.spi.max_speed_hz = spd
@@ -165,6 +188,12 @@ class MFRC522:
         self.clear_bit_mask(self.TX_CONTROL_REG, 0x03)
 
     def mfrc522_to_card(self, command, send_data):
+        """Transfers data using the MFRC522 card reader using specified command and data.
+        Parameters:
+            - command (int): The command to be sent to the MFRC522 chip. Supported commands are `PCD_AUTHENT` and `PCD_TRANSCEIVE`.
+            - send_data (list): The data to be sent to the card.
+        Returns:
+            - tuple: A tuple containing the status of the operation (`MI_OK`, `MI_ERR`, or `MI_NOTAGERR`), any received data (empty for non-responsive), and the data length (0 if there's no response)."""
         if command == self.PCD_AUTHENT:
             irq_en = 0x12
             wait_irq = 0x10
@@ -204,6 +233,11 @@ class MFRC522:
         return self.MI_ERR, [], 0
 
     def send_and_get_data(self, status):
+        """Send and retrieve data from the MFRC522 module.
+        Parameters:
+            - status (int): The status code of the operation to determine further actions.
+        Returns:
+            - tuple: A tuple containing the status code (int), the data read from the module (list), and the length of the received data in bits (int)."""
         chip_value = self.read_mfrc522(self.FIFO_LEVEL_REG)
         last_bits = self.read_mfrc522(self.CONTROL_REG) & 0x07
         back_len = (
@@ -224,6 +258,11 @@ class MFRC522:
         return status, back_bits
 
     def mfrc522_anticoll(self):
+        """Detects and prevents collisions during RFID communication.
+        Parameters:
+            - None
+        Returns:
+            - tuple: A tuple where the first element is the status code and the second element is the back data from the card. If the collision is resolved, the status is expected to be successful; otherwise, an error code is returned."""
         self.write_mfrc522(self.BIT_FRAMING_REG, 0x00)
         status, back_data, _ = self.mfrc522_to_card(
             self.PCD_TRANSCEIVE, [self.PICC_ANTICOLL, 0x20]
@@ -241,6 +280,11 @@ class MFRC522:
         return status, back_data
 
     def calculate_crc(self, in_data):
+        """Calculates the CRC from the input data using MFRC522's hardware.
+        Parameters:
+            - in_data (list of int): The data bytes for which CRC is to be calculated.
+        Returns:
+            - list of int: A list containing the two-byte CRC result."""
         self.clear_bit_mask(self.DIVIRQ_REG, 0x04)
         self.set_bit_mask(self.FIFO_LEVEL_REG, 0x80)
 
@@ -257,6 +301,11 @@ class MFRC522:
         ]
 
     def mfrc522_select_tag(self, serial_number):
+        """Select an RFID tag using its serial number.
+        Parameters:
+            - serial_number (list): The serial number of the target RFID tag as a list of integers.
+        Returns:
+            - int: Size of the selected tag's data if successful, otherwise 0."""
         buffer = [self.PICC_SElECTTAG, 0x70]
         buffer.extend(serial_number)
         buffer.extend(self.calculate_crc(buffer))
@@ -269,6 +318,14 @@ class MFRC522:
             return 0
 
     def mfrc522_auth(self, auth_mode, block_address, sector_keys, serial_numbers):
+        """Authenticate with an MFRC522 RFID reader using provided keys and serial numbers.
+        Parameters:
+            - auth_mode (int): Authentication mode (e.g., key A or key B).
+            - block_address (int): Address of the block to authenticate.
+            - sector_keys (list of int): Sector-specific keys for accessing blocks.
+            - serial_numbers (list of int): Serial number of the card to authenticate against.
+        Returns:
+            - int: Status of the authentication process, indicating success or failure."""
         buffer = [auth_mode, block_address]
         buffer.extend(sector_keys)
         buffer.extend(serial_numbers[:4])
@@ -283,6 +340,11 @@ class MFRC522:
         self.clear_bit_mask(self.STATUS2_REG, 0x08)
 
     def mfrc522_read(self, block_address):
+        """Reads data from a specified block address on an RFID card using the MFRC522 reader.
+        Parameters:
+            - block_address (int): The address of the block to read from the RFID card.
+        Returns:
+            - list or None: A list of 16 bytes representing the data read from the specified block, or None if the read operation fails."""
         receive_data = [self.PICC_READ, block_address]
         receive_data.extend(self.calculate_crc(receive_data))
         status, back_data, _ = self.mfrc522_to_card(self.PCD_TRANSCEIVE, receive_data)
@@ -295,6 +357,12 @@ class MFRC522:
             return None
 
     def mfrc522_write(self, block_address, write_data):
+        """Write data to a specified block on the MFRC522 card.
+        Parameters:
+            - block_address (int): The address of the block where data is to be written.
+            - write_data (list): A list of integers representing the data to be written, with a maximum length of 16.
+        Returns:
+            - None: The function performs the write operation but does not return a value."""
         buffer = [self.PICC_WRITE, block_address]
         buffer.extend(self.calculate_crc(buffer))
         status, back_data, back_len = self.mfrc522_to_card(self.PCD_TRANSCEIVE, buffer)
@@ -314,6 +382,11 @@ class MFRC522:
 
 
     def mfrc522_init(self):
+        """Initialize the MFRC522 module by setting up the necessary configuration registers.
+        Parameters:
+            - None
+        Returns:
+            - None"""
         self.mfrc522_reset()
 
         self.write_mfrc522(self.T_MODE_REG, 0x8D)
@@ -326,6 +399,12 @@ class MFRC522:
         self.antenna_on()
 
     def mfrc522_dump_classic_1K(self, key, uid):
+        """Read and dump data from a MIFARE Classic 1K card.
+        Parameters:
+            - key (list): The key used for authentication on the MIFARE Classic 1K card.
+            - uid (list): The unique identifier for the MIFARE Classic 1K card.
+        Returns:
+            - None: Instead of returning a value, it prints the data from each sector of the card, or an error message if authentication fails."""
         i = 0
         while i < 64:
             status = self.mfrc522_auth(self.PICC_AUTHENT1A, i, key, uid)

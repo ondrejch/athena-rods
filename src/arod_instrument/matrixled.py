@@ -76,6 +76,11 @@ def shutDown():
 
 
 def main():
+    """Execute a sequence of startup, operation, and shutdown commands in a loop.
+    Parameters:
+        None
+    Returns:
+        None"""
     while True:
         # scrollToDisplayText("Welcome to ATHENA-rod")
         startUp()

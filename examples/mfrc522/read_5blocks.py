@@ -3,6 +3,11 @@ from mfrc522 import StoreMFRC522
 
 
 def main():
+    """Main function that initializes the RFID reader and continuously reads data from RFID tags.
+    Parameters:
+        - None
+    Returns:
+        - None"""
     reader = StoreMFRC522()
     reader.BLOCK_ADDRESSES = {  # Only read 5 blocks
              7: [ 4,  5,  6],

@@ -4,6 +4,12 @@ key = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
 
 
 def main():
+    """Detect and read a card's UID using an MFRC522 reader.
+    Parameters:
+        - None: This function does not take any parameters.
+    Returns:
+        - None: This function does not return any values.
+        - It reads the UID of the card when a card is detected and prints the card's UID and content."""
     reader = StoreMFRC522()
     base_rc522 = reader.reader  # Lower-level access
     print("Hold a tag near the reader")

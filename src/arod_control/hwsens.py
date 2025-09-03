@@ -7,6 +7,11 @@ import sensors
 
 
 def get_sensors(do_print: bool = False) -> dict:
+    """Gets sensor data for fan and CPU temperature.
+    Parameters:
+        - do_print (bool): Whether to print the sensor readings; defaults to False.
+    Returns:
+        - dict: Dictionary containing fan speed and CPU temperature data."""
     sensors.init()
     data: dict = {}
     for chip in sensors.iter_detected_chips():
