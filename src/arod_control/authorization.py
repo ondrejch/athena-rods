@@ -112,10 +112,7 @@ class RFID_Authorization:
 
     def auth_tag(self) -> bool:             # Check if the RFID tag contains the correct hex digest
         tag_id, text = self.read_tag()
-        if text == self.get_digest(tag_id):
-            return True
-        else:
-            return False
+        return text == self.get_digest(tag_id)  # True if equals
 
     def write_tag(self) -> None:            # Writes the correct hex digest on the RFID tag
         tag_id, text = self.read_tag()

@@ -11,7 +11,7 @@ from arod_control import LCD1602  # LCD1602 interface
 
 class Display():
     """Display class: Represents a 16x2 LCD interface, enabling initialization and display of messages and sensor data.
-    Parameters: 
+    Parameters:
         - None: The class does not take parameters during initialization.
     Processing Logic:
         - Initializes the LCD display with a specific I2C address and backlight setting.
@@ -20,7 +20,7 @@ class Display():
     def __init__(self):
         # Initialize LCD with I2C address 0x27 and enable backlight
         LCD1602.init(0x27, 1)
-        LCD1602.write(0, 0, f'** ATHENArods **'.ljust(16))
+        LCD1602.write(0, 0, '** ATHENArods **'.ljust(16))
         LCD1602.write(0, 1, datetime.now().isoformat().ljust(16))
 
     def show_sensors(self):

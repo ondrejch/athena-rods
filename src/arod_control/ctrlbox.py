@@ -208,9 +208,9 @@ def run_auth():
             logger.debug(f"tag_id, tag_t: {tag_id}, {tag_t}")
             if rfid_auth.auth_tag():
                 CB_STATE['auth']['rfid'] = tag_id
-                logger.debug(f"auth ok")
+                logger.debug(f"auth ok, tag {tag_id}")
             else:
-                logger.info(f'Authorization: RFID failed')
+                logger.info('Authorization: RFID failed')
                 time.sleep(2)
 
         logger.info(f"Authorization: RFID {CB_STATE['auth']['rfid']} token authorized, OK for {CB_STATE['refresh']['rfid']//60} minutes!")
@@ -228,14 +228,13 @@ def run_auth():
                 CB_STATE['auth']['disp'] = True
                 CB_STATE['leds'][1] = 1
                 break
-            else:
-                time.sleep(2)
+            time.sleep(2)
 
         if CB_STATE['leds'][1] == 0:            # Reset authorization requirement
             CB_STATE['leds'][1] = 9
             CB_STATE['auth']['face'] = ''
             CB_STATE['auth']['disp'] = False
-            logger.info(f"Authorization: RFID re-authorization failed, resetting to unauthorized!")
+            logger.info("Authorization: RFID re-authorization failed, resetting to unauthorized!")
 
 
 def main_loop():
@@ -293,5 +292,5 @@ def main_loop():
 
 
 if __name__ == "__main__":
-    logger.info(f"*** ATHENA rods Control Box started ***")
+    logger.info("*** ATHENA rods Control Box started ***")
     main_loop()

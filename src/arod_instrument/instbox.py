@@ -157,6 +157,7 @@ def stream_sender(sock, power_calculator, cr_reactivity, update_event):
 
 
 def ctrl_sender(sock):
+    # TODO - add handling SRAM, this is just prototype
     while True:
         if random.random() < 0.1:
             switch_msg = {"type": "switch", "value": random.choice([True, False])}
@@ -179,7 +180,8 @@ def ctrl_receiver(sock):
         while b'\n' in buffer:
             line, buffer = buffer.split(b'\n', 1)
             try:
-                logger.info("Received control setting:", json.loads(line.decode('utf-8')))
+                data = json.loads(line.decode('utf-8'))  # TODO - use the data!
+                logger.info(f"Received control setting: {data}")
             except json.JSONDecodeError:
                 logger.info(f"Invalid JSON received: {line}")
                 continue
