@@ -264,8 +264,7 @@ class StoreMFRC522(SimpleMFRC522):
             status = self.reader.mfrc522_auth(self.reader.PICC_AUTHENT1A, block, self.KEYS, uid)
             if status != self.reader.MI_OK:
                 raise RuntimeError(f"Authentication failed for block {block}")
-            else:
-                print(f'Authenticated card {uid}')
+            print(f'Authenticated card {uid}')
 
             self.reader.mfrc522_read(block)
             if status == self.reader.MI_OK:
@@ -273,8 +272,7 @@ class StoreMFRC522(SimpleMFRC522):
                 status = self.reader.mfrc522_write(block, trailer_data)
                 if status != self.reader.MI_OK:
                     raise RuntimeError(f"Write failed for block {block}")
-                else:
-                    print(f'Wrote new block data {trailer_data} ')
+                print(f'Wrote new block data {trailer_data} ')
 
             # Stop encryption on the card
             self.reader.mfrc522_stop_crypto1()
