@@ -12,15 +12,15 @@ class ReactorPowerCalculator(threading.Thread):
         self.duration = duration
         self.stop_event = threading.Event()
         self.results = []  # To store time, reactivity, power
-        self.solver = None
+        # self.solver = None
+        # Initialize solver with dummy reactivity function; will update each step
+        self.solver = PointKineticsEquationSolver(lambda t: 0.0)
 
     def run(self):
         beta = None
         lambda_ = None
         Lambda = None
 
-        # Initialize solver with dummy reactivity function; will update each step
-        self.solver = PointKineticsEquationSolver(lambda t: 0.0)
         beta = self.solver.beta
         lambda_ = self.solver.lambda_
         Lambda = self.solver.Lambda

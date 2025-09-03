@@ -77,6 +77,7 @@ lock = threading.Lock()
 def accept_connections(server, role, conn_key):
     """ Socket communication: accepting client connections """
     while True:
+        time.sleep(0.5)
         conn, addr = server.accept()
         try:
             handshake = conn.recv(32).decode('utf-8').strip()
@@ -221,17 +222,17 @@ def run_auth():
         time.sleep(CB_STATE['refresh']['rfid']) # 3. Auth re-checking
         attempts = 5                            # RFID re-authenticate trials
 
-        CB_STATE['leds'][2] = 0
+        CB_STATE['leds'][1] = 0
         for i in range(attempts):
             if rfid_auth.auth_tag():
                 CB_STATE['auth']['disp'] = True
-                CB_STATE['leds'][2] = 1
+                CB_STATE['leds'][1] = 1
                 break
             else:
                 time.sleep(2)
 
-        if CB_STATE['leds'][2] == 0:            # Reset authorization requirement
-            CB_STATE['leds'][2] = 9
+        if CB_STATE['leds'][1] == 0:            # Reset authorization requirement
+            CB_STATE['leds'][1] = 9
             CB_STATE['auth']['face'] = ''
             CB_STATE['auth']['disp'] = False
             logger.info(f"Authorization: RFID re-authorization failed, resetting to unauthorized!")

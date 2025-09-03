@@ -63,21 +63,21 @@ def notMoving(h: int = -1):
 def startUp():
     for i in range(8):
         with canvas(device) as draw:
-            draw.rectangle((1, 7, 6, 7 - i), outline="white", fill="white")
-        time.sleep(0.1)
+            draw.rectangle( (1, 7-i, 6, 7), outline="white", fill="white")
+        time.sleep(float(i)/20.0+0.05)
 
 
 def shutDown():
     for i in range(8):
         with canvas(device) as draw:
-            draw.rectangle((1, 7, 6, i), outline="white", fill="white")
+            draw.rectangle( (1, i, 6, 7), outline="white", fill="white")
         time.sleep(0.1)
     device.clear()  # Turns off all LEDs
 
 
 def main():
     while True:
-        #        scrollToDisplayText("Welcome, Ondrej!")
+        # scrollToDisplayText("Welcome to ATHENA-rod")
         startUp()
         arrowUp(1, 1)
         time.sleep(0.2)

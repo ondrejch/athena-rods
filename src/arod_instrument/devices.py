@@ -1,10 +1,12 @@
 """ Ultrasonic distance measurement  """
 import time
+
+import numpy as np
 from gpiozero import DistanceSensor
 from gpiozero import Motor
 from gpiozero import Servo
 
-sensor = DistanceSensor(echo=24, trigger=23)
+sonar = DistanceSensor(echo=24, trigger=23)
 motor = Motor(forward=17, backward=27, enable=22)
 # motor.forward()
 # motor.backward()
@@ -23,8 +25,38 @@ def speed_of_sound(tempC: float, rel_humidity: float) -> float:
 
 def get_distance() -> float:
     """ Returns the distance measurement [cm] """
-    return sensor.distance * 100.0
+    return sonar.distance * 100.0
 
+
+def readFirstLine(filename):
+    """ Function to read first line and return integer, for DHT11 """
+    try:
+        f = open(filename, "rt")
+        value = int(f.readline())
+        f.close()
+        return True, value
+    except ValueError:
+        f.close()
+        return False, -1
+    except OSError:
+        return False, 0
+
+
+def get_dht() -> tuple[float, float]:
+    """ Reads DHT11 sensor and returns temperature [C] and humidity [%]
+        Note this is different for RPi5 than other Pis!
+        See: https://forums.raspberrypi.com/viewtopic.php?t=366269 """
+    tempC: float = -9999.9
+    humidity_pct: float = -1.0
+    device0: str = "/sys/bus/iio/devices/iio:device0"
+    Flag, Temperature = readFirstLine(device0 + "/in_temp_input")
+    if Flag:
+        tempC = float(Temperature) / 1000.0
+
+    Flag, Humidity = readFirstLine(device0 + "/in_humidityrelative_input")
+    if Flag:
+        humidity_pct = float(Humidity) / 1000.0
+    return tempC, humidity_pct
 
 # TRIG = 23
 # ECHO = 24
