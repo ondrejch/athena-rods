@@ -306,9 +306,7 @@ class MFRC522:
             - serial_number (list): The serial number of the target RFID tag as a list of integers.
         Returns:
             - int: Size of the selected tag's data if successful, otherwise 0."""
-        buffer = [self.PICC_SElECTTAG, 0x70]
-        buffer.extend(serial_number)
-        buffer.extend(self.calculate_crc(buffer))
+        buffer = [self.PICC_SElECTTAG, 112, *serial_number, *self.calculate_crc(buffer)]
         status, back_data, back_len = self.mfrc522_to_card(self.PCD_TRANSCEIVE, buffer)
 
         if status == self.MI_OK and back_len == 0x18:
@@ -326,9 +324,7 @@ class MFRC522:
             - serial_numbers (list of int): Serial number of the card to authenticate against.
         Returns:
             - int: Status of the authentication process, indicating success or failure."""
-        buffer = [auth_mode, block_address]
-        buffer.extend(sector_keys)
-        buffer.extend(serial_numbers[:4])
+        buffer = [auth_mode, block_address, *sector_keys, *serial_numbers[:4]]
         status, _, _ = self.mfrc522_to_card(self.PCD_AUTHENT, buffer)
         if status != self.MI_OK:
             self.logger.error("AUTH ERROR!!")
@@ -345,8 +341,7 @@ class MFRC522:
             - block_address (int): The address of the block to read from the RFID card.
         Returns:
             - list or None: A list of 16 bytes representing the data read from the specified block, or None if the read operation fails."""
-        receive_data = [self.PICC_READ, block_address]
-        receive_data.extend(self.calculate_crc(receive_data))
+        receive_data = [self.PICC_READ, block_address, *self.calculate_crc(receive_data)]
         status, back_data, _ = self.mfrc522_to_card(self.PCD_TRANSCEIVE, receive_data)
         if status != self.MI_OK:
             self.logger.error("Error while reading!")
@@ -363,15 +358,13 @@ class MFRC522:
             - write_data (list): A list of integers representing the data to be written, with a maximum length of 16.
         Returns:
             - None: The function performs the write operation but does not return a value."""
-        buffer = [self.PICC_WRITE, block_address]
-        buffer.extend(self.calculate_crc(buffer))
+        buffer = [self.PICC_WRITE, block_address, *self.calculate_crc(buffer)]
         status, back_data, back_len = self.mfrc522_to_card(self.PCD_TRANSCEIVE, buffer)
         if status != self.MI_OK or back_len != 4 or (back_data[0] & 0x0F) != 0x0A:
             status = self.MI_ERR
         self.logger.debug(f"{back_len} backdata &0x0F == 0x0A {back_data[0] & 0x0F}")
         if status == self.MI_OK:
-            buffer = [data for index, data in enumerate(write_data) if index < 16]
-            buffer.extend(self.calculate_crc(buffer))
+            buffer = [*[data for (index, data) in enumerate(write_data) if index < 16], *self.calculate_crc(buffer)]
             status, back_data, back_len = self.mfrc522_to_card(
                 self.PCD_TRANSCEIVE, buffer
             )

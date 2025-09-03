@@ -254,8 +254,7 @@ class StoreMFRC522(SimpleMFRC522):
                 break
 
         # Set all trailing sectors
-        trailer_blocks = [3]
-        trailer_blocks.extend(self.BLOCK_ADDRESSES.keys())
+        trailer_blocks = [3, *self.BLOCK_ADDRESSES.keys()]
         for block in trailer_blocks:
             # Select the tag
             self.reader.mfrc522_select_tag(uid)
