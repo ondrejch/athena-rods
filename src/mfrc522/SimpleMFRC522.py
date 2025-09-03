@@ -11,6 +11,13 @@ DEFAULT_KEYS = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
 
 
 class SimpleMFRC522:
+    """SimpleMFRC522 class for interfacing with an MFRC522 RFID reader.
+    Parameters:
+        - None
+    Processing Logic:
+        - Initializes an MFRC522 object to interact with the RFID hardware.
+        - Provides blocking and non-blocking read/write operations for RFID tags.
+        - Utilizes a static method to convert a UID to a numeric ID for tag identification."""
     KEYS = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
     BLOCK_ADDRESSES = [8, 9, 10]
 
@@ -43,6 +50,11 @@ class SimpleMFRC522:
         return None if status != self.reader.MI_OK else self._uid_to_number(uid)
 
     def _read_no_block(self):
+        """Reads data from an RFID tag without blocking on operations.
+        Parameters:
+            - None
+        Returns:
+            - tuple: A tuple containing the tag ID (int) and the text read from the tag (str). Returns (None, None) if reading operations are not successful."""
         status, _ = self.reader.mfrc522_request(self.reader.PICC_REQIDL)
         if status != self.reader.MI_OK:
             return None, None
@@ -68,6 +80,11 @@ class SimpleMFRC522:
         return tag_id, text_read
 
     def _write_no_block(self, text):
+        """Writes data to RFID blocks without blocking.
+        Parameters:
+            - text (str): Text to write into the RFID blocks.
+        Returns:
+            - tuple: A pair consisting of tag_id (int) and the written text (str) truncated to the block capacity, or (None, None) if operation failed."""
         status, _ = self.reader.mfrc522_request(self.reader.PICC_REQIDL)
         if status != self.reader.MI_OK:
             return None, None
@@ -104,6 +121,11 @@ class SimpleMFRC522:
 class StoreMFRC522(SimpleMFRC522):
     """ Use more storage on the RFID card """
     def __init__(self):
+        """Initialize a class with block addresses and calculate total block slots.
+        Parameters:
+            None
+        Returns:
+            None"""
         super().__init__()
         self.BLOCK_ADDRESSES = {
              7: [ 4,  5,  6],
@@ -125,6 +147,12 @@ class StoreMFRC522(SimpleMFRC522):
         self.BLOCK_SLOTS = sum(len(lst) for lst in self.BLOCK_ADDRESSES.values())
 
     def _read_no_block(self):
+        """Read data from an RFID tag without blocking.
+        Parameters:
+            - None
+        Returns:
+            - tuple (int or None, str): A tuple containing the tag ID as an integer if reading was successful,
+        and the text data read from the tag; returns (None, None) if reading is unsuccessful."""
         status, _ = self.reader.mfrc522_request(self.reader.PICC_REQIDL)
         if status != self.reader.MI_OK:
             return None, None
@@ -155,6 +183,11 @@ class StoreMFRC522(SimpleMFRC522):
         return tag_id, text_read
 
     def _write_no_block(self, text):
+        """Write data to an RFID card without blocking the operation.
+        Parameters:
+            - text (str): The data to be written on the RFID card.
+        Returns:
+            - tuple: A tuple containing the tag ID (int or None if failed) and the written text (str or None if failed)."""
         status, _ = self.reader.mfrc522_request(self.reader.PICC_REQIDL)
         if status != self.reader.MI_OK:
             return None, None
@@ -183,6 +216,12 @@ class StoreMFRC522(SimpleMFRC522):
         return tag_id, text[: len(self.BLOCK_ADDRESSES) * 16]
 
     def write_password_to_blocks(self, password):
+        """Write a 6-byte password key as both Key A and Key B plus access bits into sector trailer blocks.
+        Parameters:
+            - password (list[int]): List of 6 integers (each ranging from 0 to 255) representing the password key.
+        Raises:
+            - ValueError: If the password is not a list of 6 integers (0-255).
+            - RuntimeError: If authentication or writing fails for any block."""
         raise NotImplementedError("Seems to brick the RFID tag, needs more work (and more tags to bricks..).")
         """
         Ideas for future - set keys A and B independently by different methods; keep the other code default for testing.

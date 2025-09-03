@@ -20,6 +20,11 @@ def run_display():
 
 def main_loop():
     # Start all threads
+    """Runs the main loop with threading, primarily for running a display function.
+    Parameters:
+        None
+    Returns:
+        None"""
     display_thread = threading.Thread(target=run_display)
     display_thread.daemon = True
     display_thread.start()

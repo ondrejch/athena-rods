@@ -24,6 +24,11 @@ class FaceAuthorization:
         self.picam2.start()
 
     def scan_face(self) -> str:
+        """Detects and identifies a face in a captured image from a camera.
+        Parameters:
+            - self: Instance of the class which provides access to the camera and face encoding data.
+        Returns:
+            - str: The name of the identified person if a match is found, otherwise "Unknown"."""
         frame = self.picam2.capture_array()
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         boxes = face_recognition.face_locations(rgb_frame)
@@ -47,8 +52,22 @@ class FaceAuthorization:
 
 
 class RFID_Authorization:
+    """RFID_Authorization class for handling RFID tag operations including digest creation, reading, and authorization.
+    Parameters:
+        - None
+    Processing Logic:
+        - Initializes by reading the CA certificate fingerprint and configuring block addresses for the MFRC522 reader.
+        - Calculates a hash digest using the tag ID and a fingerprint for secure storage on RFID tags.
+        - Reads and optionally prints the content of an RFID tag using a reader device for diagnostic purposes.
+        - Compares the read data with expected data to check the authenticity of the RFID tag.
+        - Writes correct hash digest data onto the RFID tag to ensure the tag holds valid expected data."""
     def __init__(self):
         # Read fingerprint of ATHENA rod CA certificate
+        """Initialize the class and configure the fingerprint and block addresses.
+        Parameters:
+            None
+        Returns:
+            None"""
         with open(os.path.join(os.path.expanduser('~'), "app/etc/ca-chain.txt"), "r") as f:
             text = f.read()
         self.fp = int(text.replace(':', ''), 16)  # Convert base-16 to integer
@@ -64,6 +83,11 @@ class RFID_Authorization:
         self.do_print: bool = False
 
     def get_digest(self, tag_id):           # Get data expected on the RFIC card
+        """Get data expected on the RFIC card.
+        Parameters:
+            - tag_id (str or int): Tag identifier to be processed for hashing.
+        Returns:
+            - str: Hexadecimal digest of the hash, which is stored on the RFID tag."""
         n = int(tag_id) * self.fp           # Tag_ID * fingerprint is a secret to hash and store
         assert n / self.fp == int(tag_id)   # Check for overflow
         n_bytes = (n.bit_length() + 7) // 8                 # How many bytes we need
@@ -73,6 +97,11 @@ class RFID_Authorization:
         return hash_obj.hexdigest()         # This is what should be stored on the RFID tag
 
     def read_tag(self) -> tuple[str, str]:          # Read RFID tag content
+        """Reads the content of an RFID tag using a reader device.
+        Parameters:
+            - None
+        Returns:
+            - tuple[str, str]: A tuple containing the tag ID and the cleaned text content."""
         if self.do_print:
             print("Hold a tag near the reader")
         tag_id, text_raw = self.reader.read()

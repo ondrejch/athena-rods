@@ -242,6 +242,11 @@ def main_loop():
     # Start all threads
 
     # LED driver
+    """Start multiple threads to handle LED, LCD, authorization, and socket communication processes.
+    Parameters:
+        None
+    Returns:
+        None"""
     led_thread = threading.Thread(target=run_leds)
     led_thread.daemon = True
     led_thread.start()

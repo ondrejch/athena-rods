@@ -19,6 +19,14 @@ ctrl_status_q = queue.Queue()
 
 
 def connect_with_retry(host, port, handshake, delay=5):
+    """Connect to a server with retry logic until successful.
+    Parameters:
+        - host (str): The server's hostname or IP address to connect to.
+        - port (int): The server's port number to connect to.
+        - handshake (str): The handshake message to be sent upon connection.
+        - delay (int, optional): The number of seconds to wait before retrying a failed connection attempt. Defaults to 5.
+    Returns:
+        - socket.socket: The connected socket object upon a successful connection."""
     while True:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -31,6 +39,11 @@ def connect_with_retry(host, port, handshake, delay=5):
 
 
 def stream_receiver(sock):
+    """Receives and processes continuous data stream from a socket.
+    Parameters:
+        - sock (socket): A socket object from which to receive the data.
+    Returns:
+        - None: This function does not return anything. It processes data as it is received, unpacking and queuing it."""
     try:
         while True:
             data = sock.recv(8)
@@ -43,6 +56,11 @@ def stream_receiver(sock):
 
 
 def ctrl_receiver(sock):
+    """Receives messages from a socket and updates a queue with JSON-decoded status.
+    Parameters:
+        - sock (socket.socket): The socket object from which to receive messages.
+    Returns:
+        - None: This function does not return a value; it processes incoming data continuously until the connection is closed."""
     buffer = b""
     while True:
         msg = sock.recv(1024)
@@ -86,6 +104,11 @@ def start_connections():
     Input("interval", "n_intervals"),
 )
 def update_plot(n):
+    """Update the plot with the latest neutron density data retrieved from a queue.
+    Parameters:
+        - n (int): Not directly used in the function body.
+    Returns:
+        - tuple: A tuple containing the plot figure (dcc.Graph figure) updated with neutron density data and a status string indicating socket connection status."""
     neutron_vals = []
     x_vals = []
     while not stream_data_q.empty():
@@ -108,6 +131,14 @@ def update_plot(n):
     State('motor-set', 'value'), State('servo-set', 'value'), State('source-set', 'value'),
 )
 def send_settings(n_clicks, motor_set, servo_set, source_set):
+    """Send configuration settings via a socket connection.
+    Parameters:
+        - n_clicks (int): Number of clicks to trigger sending of settings.
+        - motor_set (Any): Configuration value for motor settings.
+        - servo_set (Any): Configuration value for servo settings.
+        - source_set (Any): Configuration value for source settings.
+    Returns:
+        - str: Confirmation message if settings are sent, otherwise an empty string."""
     if n_clicks > 0:
         msg = {
             "type": "settings",
