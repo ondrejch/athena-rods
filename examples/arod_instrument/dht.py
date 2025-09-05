@@ -23,14 +23,14 @@ def readFirstLine(filename):
 try:
     while True:
         Flag, Temperature = readFirstLine(device0 + "/in_temp_input")
-        print("Temperature:", end="")
+        print("Temperature: ", end="")
         if Flag:
-            print(Temperature // 1000, "\u2103", end="\t")
+            print(Temperature // 1000, "degC", end="\t")
         else:
             print("N.A.", end="\t")
 
         Flag, Humidity = readFirstLine(device0 + "/in_humidityrelative_input")
-        print("Humidity:", end="")
+        print("Humidity: ", end="")
         if Flag:
             print(Humidity // 1000, "%")
         else:
