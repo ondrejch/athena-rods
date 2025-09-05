@@ -7,28 +7,34 @@ from gpiozero import Motor as OriginalMotor
 from gpiozero import AngularServo
 from gpiozero import Button
 
+
 class Motor(OriginalMotor):
     """ Adding methods to move the rod intiutively """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
     def up(self):
         self.backward()
+
     def down(self):
         self.forward()
 
-sonar = DistanceSensor(echo=24, trigger=23)  # Ultrasound sonar to measure distance
 
+sonar = DistanceSensor(echo=24, trigger=23)  # Ultrasound sonar to measure distance
 motor = Motor(forward=17, backward=27, enable=22)  # Motor that drives the rod
 servo = AngularServo(15, initial_angle=180, min_angle=0, max_angle=180,  # Rod engagement servo
                      min_pulse_width=1.0/1000.0, max_pulse_width=25.0/10000.0)
 limit_switch = Button(20)  # Limit switch at the bottom of the control rod slider
 limit_switch.when_pressed = motor.stop  # Switch motor off when limit switch is hit
 
+
 def rod_scram():
     servo.angle = 0
 
+
 def rod_engage():
     servo.angle = 180
+
 
 def speed_of_sound(tempC: float, rel_humidity: float) -> float:
     """ Returns speed of sound in air [m/s], C_S from https://doi.org/10.1016/j.pisc.2016.06.024 """

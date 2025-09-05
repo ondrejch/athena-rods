@@ -97,6 +97,7 @@ class ReactorPowerCalculator(threading.Thread):
             # Sleep to maintain real-time pacing
             t_current += self.dt
             elapsed = time.time() - start_time - t_current
+            print("Timing: ", elapsed, time.time(), start_time, t_current)
             time.sleep(max(0, self.dt - elapsed))
 
     def stop(self):
