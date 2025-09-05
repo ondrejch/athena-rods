@@ -92,7 +92,8 @@ class PointKineticsEquationSolver:
             return np.concatenate(([dndt], dCdt))
 
         self.solution = solve_ivp(equations, t_span, y0, method='RK45', t_eval=t_eval, rtol=1e-6, atol=1e-8)
-        return self.solution.t, self.solution.y[0], self.solution.y[1:]
+        # print("**** SOLUTION: ", self.solution)
+        return self.solution.t, self.solution.y
 
     def plot_neutron_density(self, figsize=(8, 4), logscale=True, **plot_kwargs):
         """ Plot neutron density temporal evolution

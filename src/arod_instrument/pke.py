@@ -55,6 +55,8 @@ class ReactorPowerCalculator(threading.Thread):
         n0 = 1.0
         C0 = beta / (lambda_ * Lambda) * n0
         state = np.concatenate(([n0], C0))
+        if self.DEBUG > 2:
+            print(state)
 
         t_current = 0.0
         start_time = time.time()
@@ -75,7 +77,9 @@ class ReactorPowerCalculator(threading.Thread):
             # Solve equations for this time step
             sol = self.solver.solve(t_span=(t_current, t_current + self.dt), t_eval=[t_current + self.dt],
                                     y0_override=state)
-            state = sol[2][:, -1]
+            # print("SOL: ", sol)
+            state = sol[1].flatten()
+            # print("STATE: ", state)
             neutron_density = state[0]
 
             current_time = time.time() - start_time

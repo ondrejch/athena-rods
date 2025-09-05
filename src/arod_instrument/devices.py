@@ -30,15 +30,6 @@ def rod_scram():
 def rod_engage():
     servo.angle = 180
 
-def rod_lift():
-    """ Temprarily overwrites limit switch to lift the rod reliably """
-    rod_engage()
-    limit_switch.when_pressed = None
-    motor.up()
-    time.sleep(0.7)
-    motor.stop()
-    limit_switch.when_pressed = motor.stop
-
 def speed_of_sound(tempC: float, rel_humidity: float) -> float:
     """ Returns speed of sound in air [m/s], C_S from https://doi.org/10.1016/j.pisc.2016.06.024 """
     assert -20.0 < tempC < 100.0

@@ -13,7 +13,7 @@ import json
 import threading
 import numpy as np
 from arod_control import PORT_CTRL, PORT_STREAM, CONTROL_IP
-from devices import get_dht, get_distance, speed_of_sound, motor, sonar, rod_engage, rod_scram, rod_lift
+from devices import get_dht, get_distance, speed_of_sound, motor, sonar, rod_engage, rod_scram, limit_switch
 from pke import PointKineticsEquationSolver, ReactorPowerCalculator
 
 # LOGGER
@@ -37,6 +37,27 @@ console_handler.setFormatter(formatter)
 # Add handlers to logger
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
+
+def limit_switch_pressed():
+    motor.stop()
+    switch_msg = {"type": "limit_switch", "value": "pressed"}
+    sock.sendall((json.dumps(switch_msg) + '\n').encode('utf-8'))
+
+def limit_swich_released():
+    switch_msg = {"type": "limit_switch", "value": "released"}
+    sock.sendall((json.dumps(switch_msg) + '\n').encode('utf-8'))
+
+limit_switch.when_pressed = limit_switch_pressed
+limit_switch.when_released = limit_swich_released
+
+def rod_lift():
+    """ Temprarily overwrites limit switch to lift the rod reliably """
+    rod_engage()
+    limit_switch.when_pressed = None  
+    motor.up()
+    time.sleep(0.7)
+    motor.stop()
+    limit_switch.when_pressed = limit_switch_pressed
 
 
 class Reactivity:
@@ -156,13 +177,11 @@ def stream_sender(sock, power_calculator, cr_reactivity, update_event):
         update_event.clear()
 
 
-def ctrl_sender(sock):
-    # TODO - add handling SRAM, this is just prototype
-    while True:
-        if random.random() < 0.1:
-            switch_msg = {"type": "switch", "value": random.choice([True, False])}
-            sock.sendall((json.dumps(switch_msg) + '\n').encode('utf-8'))
-        time.sleep(1)
+# def ctrl_sender(sock):
+#     while True:
+#             switch_msg = {"type": "limit_switch", "value": ""}
+#             sock.sendall((json.dumps(switch_msg) + '\n').encode('utf-8'))
+#         time.sleep(1)
 
 
 def ctrl_receiver(sock):
@@ -202,7 +221,7 @@ def main():
     stream_sock = connect_with_retry(CONTROL_IP, PORT_STREAM, "stream_instr")
     ctrl_sock = connect_with_retry(CONTROL_IP, PORT_CTRL, "ctrl_instr")
 
-    threading.Thread(target=ctrl_sender, args=(ctrl_sock,), daemon=True).start()
+    # threading.Thread(target=ctrl_sender, args=(ctrl_sock,), daemon=True).start()
     threading.Thread(target=ctrl_receiver, args=(ctrl_sock,), daemon=True).start()
 
     cr_reactivity = Reactivity()
