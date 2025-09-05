@@ -13,7 +13,7 @@ import json
 import threading
 import numpy as np
 from arod_control import PORT_CTRL, PORT_STREAM, CONTROL_IP
-from devices import get_dht, get_distance, speed_of_sound, motor, sonar
+from devices import get_dht, get_distance, speed_of_sound, motor, sonar, rod_engage, rod_scram, rod_lift
 from pke import PointKineticsEquationSolver, ReactorPowerCalculator
 
 # LOGGER
