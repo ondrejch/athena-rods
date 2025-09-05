@@ -14,7 +14,7 @@ from arod_control.display import Display
 from arod_control.authorization import RFID_Authorization, FaceAuthorization
 from arod_control import PORT_CTRL, PORT_STREAM     # Socket settings
 
-
+FAKE_FACE_AUTH: bool = True  # FAKE face authorization, use for developemnt only!!
 CB_STATE: dict = {  # Control box machine state
     'auth': {       # Authorization status
         'face': '',
@@ -190,13 +190,18 @@ def run_auth():
     face_auth = FaceAuthorization()
     logger.info('Authorization thread initialized')
     while True:
-        while not CB_STATE['auth']['face']:     # 1. Wait for face authorization
-            detected_name = face_auth.scan_face()
-            if detected_name in APPROVED_USER_NAMES:
-                CB_STATE['auth']['face'] = detected_name
-                logger.info(f'Authorization: authorized user {detected_name} by face')
+        if not FAKE_FACE_AUTH:
+            while not CB_STATE['auth']['face']:     # 1. Wait for face authorization
+                detected_name = face_auth.scan_face()
+                if detected_name in APPROVED_USER_NAMES:
+                    CB_STATE['auth']['face'] = detected_name
+                    logger.info(f'Authorization: authorized user {detected_name} by face')
+                else:
+                    time.sleep(2)
             else:
-                time.sleep(2)
+                detected_name = APPROVED_USER_NAMES[0]
+                CB_STATE['auth']['face'] = detected_name
+                logger.info(f'FAKE Authorization: authorized user {detected_name} by face')
 
         CB_STATE['message']['text'] = f"Authorized user\n{CB_STATE['auth']['face']}"
         CB_STATE['message']['timer'] = 5
