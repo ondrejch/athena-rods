@@ -13,7 +13,6 @@ from arod_control.leds import LEDs
 from arod_control.display import Display
 from arod_control.authorization import RFID_Authorization, FaceAuthorization
 from arod_control import PORT_CTRL, PORT_STREAM  # Socket settings
-from socket_utils import StreamingPacket
 
 # Configuration
 FAKE_FACE_AUTH: bool = True  # FAKE face authorization, use for development only!!

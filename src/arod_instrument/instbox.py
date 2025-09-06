@@ -5,16 +5,13 @@ Ondrej Chvala <ochvala@utexas.edu>
 """
 
 import logging
-import socket
 import queue
 import time
-import struct
 import json
 import threading
-import numpy as np
 from arod_control import PORT_CTRL, PORT_STREAM, CONTROL_IP
 from devices import get_dht, get_distance, speed_of_sound, motor, sonar, rod_engage, rod_scram, limit_switch
-from pke import PointKineticsEquationSolver, ReactorPowerCalculator
+from pke import ReactorPowerCalculator
 from arod_control.socket_utils import SocketManager, StreamingPacket
 
 # LOGGER
@@ -181,7 +178,7 @@ def set_speed_of_sound():
             logger.warning(f"Error setting speed of sound: {e}")
             retry_count += 1
 
-        time.sleep(1)
+        stop_event.wait(timeout=1)
 
     if retry_count >= max_retries:
         logger.error("Failed to set speed of sound after multiple attempts")
@@ -224,15 +221,16 @@ def ctrl_receiver():
                     except (queue.Empty, queue.Full):
                         logger.warning("Control queue management error")
             else:
-                time.sleep(1)  # Wait before retry
+                stop_event.wait(timeout=1)        # Wait before retry
 
         except Exception as e:
             logger.error(f"Control receiver error: {e}")
-            time.sleep(1)
+            stop_event.wait(timeout=1)
 
 
-def stream_sender(power_calculator, cr_reactivity, update_event):
+def stream_sender(cr_reactivity, update_event):
     """Send stream data to control box"""
+    global power_calculator
     while not stop_event.is_set():
         try:
             # Wait for signal that new data is available
@@ -256,7 +254,7 @@ def stream_sender(power_calculator, cr_reactivity, update_event):
 
         except Exception as e:
             logger.error(f"Stream sender error: {e}")
-            time.sleep(1)
+            stop_event.wait(timeout=1)
 
 
 def main():
@@ -280,18 +278,18 @@ def main():
     power_calculator = ReactorPowerCalculator(cr_reactivity.get_reactivity, dt=0.1, update_event=update_event)
     power_calculator.start()
 
-    # Start stream sender
-    threading.Thread(target=stream_sender, args=(power_calculator, cr_reactivity, update_event), daemon=True).start()
-
     # Start control message processor
     threading.Thread(target=process_ctrl_status, daemon=True).start()
+
+    # Start stream sender
+    threading.Thread(target=stream_sender, args=(cr_reactivity, update_event), daemon=True).start()
 
     logger.info("All threads started, entering main loop")
 
     # Main loop - could implement additional monitoring or management here
     try:
-        while True:
-            time.sleep(5)  # Optional: Add health checking logic here
+        while not stop_event.is_set():
+            stop_event.wait(timeout=5.0)
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt detected, shutting down...")
         return
