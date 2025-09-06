@@ -14,6 +14,12 @@ from devices import get_dht, get_distance, speed_of_sound, motor, sonar, rod_eng
 from pke import ReactorPowerCalculator
 from arod_control.socket_utils import SocketManager, StreamingPacket
 
+# External source for PKE
+SOURCE_STRENGTH: float = 1.0e-3  # Default external neutron source strength when enabled
+
+# Limit on rod extension, 20 cm
+MAX_ROD_DISTANCE: float = 20.0
+
 # LOGGER
 logger = logging.getLogger('AIBox')  # ATHENA rods Instrumentation Box
 logger.setLevel(logging.DEBUG)
@@ -42,9 +48,6 @@ ctrl_socket = SocketManager(CONTROL_IP, PORT_CTRL, "ctrl_instr")
 # Communication queues
 ctrl_status_q = queue.Queue(maxsize=100)  # Limit size to prevent memory issues
 stop_event = threading.Event()
-
-# External source for PKE
-SOURCE_STRENGTH = 1.0e-3  # Default external neutron source strength when enabled
 
 
 def limit_switch_pressed():
@@ -90,7 +93,8 @@ def process_ctrl_status():
                     if motor_set == 1:
                         if limit_switch_pressed():
                             rod_lift()
-                        motor.up()
+                        if get_distance() < MAX_ROD_DISTANCE:
+                            motor.up()
                     elif motor_set == -1:
                         motor.down()
                     else:
