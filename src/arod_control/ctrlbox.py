@@ -68,30 +68,64 @@ def accept_connections(server_socket, role, conn_key):
     """Socket communication: accepting client connections with improved error handling"""
     while True:
         try:
+            # Accept new connections with a timeout
+            server_socket.settimeout(5.0)
             conn, addr = server_socket.accept()
-            conn.settimeout(10.0)  # Set timeout for socket operations
+            server_socket.settimeout(None)  # Reset to blocking mode
+
+            # Set a generous initial timeout for handshake
+            conn.settimeout(10.0)
             logger.info(f"Incoming connection for {role} from {addr}")
 
-            # Set a timeout for receiving handshake
-            conn.settimeout(5.0)
-            handshake_data = conn.recv(32)
-            if not handshake_data:
-                logger.warning(f"Empty handshake from {addr}, closing connection")
+            # Receive handshake with clear size limit
+            try:
+                handshake_data = conn.recv(128)  # Increased buffer for handshake
+                if not handshake_data:
+                    logger.warning(f"Empty handshake from {addr}, closing connection")
+                    conn.close()
+                    continue
+            except socket.timeout:
+                logger.warning(f"Handshake timeout from {addr}, closing connection")
                 conn.close()
                 continue
 
-            handshake = handshake_data.decode('utf-8').strip()
+            # Process handshake
+            try:
+                handshake = handshake_data.decode('utf-8').strip()
+                # Remove any trailing newline that may be part of the handshake
+                if handshake.endswith('\n'):
+                    handshake = handshake[:-1]
+            except UnicodeDecodeError:
+                logger.warning(f"Invalid handshake encoding from {addr}, closing connection")
+                conn.close()
+                continue
 
             # Authorization check for display clients only
             if role.startswith("stream_display") or role.startswith("ctrl_display"):
                 if not CB_STATE['auth']['disp']:
                     logger.info(f"Rejected {role} connection from {addr} due to AUTH=False")
-                    conn.sendall(b'REJECT:UNAUTHORIZED\n')
-                    conn.close()
+                    try:
+                        conn.sendall(b'REJECT:UNAUTHORIZED\n')
+                        conn.close()
+                    except Exception as e:
+                        logger.warning(f"Error sending rejection message: {e}")
                     continue
 
+            # Verify handshake matches expected role
             if handshake != role:
                 logger.warning(f"Invalid handshake '{handshake}' from {addr}, expected '{role}'")
+                try:
+                    conn.sendall(b'REJECT:INVALID_HANDSHAKE\n')
+                    conn.close()
+                except Exception as e:
+                    logger.warning(f"Error sending handshake rejection: {e}")
+                continue
+
+            # Handshake OK, send acknowledgment
+            try:
+                conn.sendall(b'OK:CONNECTED\n')
+            except Exception as e:
+                logger.warning(f"Error sending connection acknowledgment: {e}")
                 conn.close()
                 continue
 
@@ -99,14 +133,21 @@ def accept_connections(server_socket, role, conn_key):
             with connection_lock:
                 old_conn = connections.get(conn_key)
                 if old_conn is not None:
+                    logger.info(f"Closing previous {conn_key} connection")
                     try:
                         old_conn.shutdown(socket.SHUT_RDWR)
                         old_conn.close()
                     except Exception as e:
                         logger.warning(f"Error closing old connection: {e}")
 
+                # Use a more reasonable timeout for normal operation
+                conn.settimeout(3.0)
                 connections[conn_key] = conn
                 logger.info(f"Socket connection: {role} connected from {addr}")
+
+        except socket.timeout:
+            # Accept timeout, just continue
+            continue
 
         except OSError as e:
             if e.errno == 9:  # Bad file descriptor, socket likely closed
@@ -126,6 +167,8 @@ def forward_stream(src_key, dst_key):
     Socket communication: forwarding stream data between connections
     with robust error handling and reconnection logic
     """
+    buffer = b""  # Buffer to accumulate partial messages
+
     while True:
         # Get current connections under lock
         with connection_lock:
@@ -138,42 +181,64 @@ def forward_stream(src_key, dst_key):
             continue
 
         try:
-            # Set a reasonable timeout
-            src_sock.settimeout(1.0)
+            # Set a reasonable timeout - not too short
+            src_sock.settimeout(3.0)  # Increased timeout
 
-            # Try to receive exactly 12 bytes (3 float values)
-            data = b""
-            bytes_received = 0
-
-            while bytes_received < 12:
-                chunk = src_sock.recv(12 - bytes_received)
+            # Try to receive data into buffer
+            try:
+                chunk = src_sock.recv(1024)  # Receive a larger chunk for efficiency
                 if not chunk:  # Connection closed
                     raise ConnectionResetError(f"Connection closed from {src_key}")
 
-                data += chunk
-                bytes_received = len(data)
+                buffer += chunk
+            except socket.timeout:
+                # Timeout is not fatal, just continue
+                continue
 
-            # Forward the complete data packet
-            dst_sock.sendall(data)
+            # Process complete packets of 12 bytes (3 floats)
+            while len(buffer) >= 12:
+                packet, buffer = buffer[:12], buffer[12:]
 
-        except (ConnectionResetError, BrokenPipeError, socket.timeout) as e:
-            logger.info(f"Stream {src_key} to {dst_key} error: {e}")
+                # Try to forward the packet
+                try:
+                    dst_sock.sendall(packet)
+                except Exception as e:
+                    logger.error(f"Error forwarding packet to {dst_key}: {e}")
+                    # Mark destination as failed
+                    with connection_lock:
+                        if dst_key in connections and connections[dst_key] == dst_sock:
+                            try:
+                                connections[dst_key].close()
+                            except:
+                                pass
+                            connections[dst_key] = None
+                    break  # Exit inner loop, reset connections
+
+        except (ConnectionResetError, BrokenPipeError) as e:
+            logger.info(f"Stream {src_key} to {dst_key} connection error: {e}")
+            # Reset buffer when connection is lost
+            buffer = b""
 
             # Clean up the affected connection(s)
             with connection_lock:
                 if src_key in connections and connections[src_key] == src_sock:
                     try:
-                        connections[src_key].close()
-                    except Exception:
+                        src_sock.close()
+                    except:
                         pass
                     connections[src_key] = None
 
-            # Short delay before retry
-            time.sleep(0.5)
+            # Longer delay before retry to allow reconnection
+            time.sleep(1.0)
+
+        except socket.timeout:
+            # Timeout is not fatal, just continue
+            continue
 
         except Exception as e:
             logger.error(f"Unexpected error in forward_stream between {src_key} and {dst_key}: {e}")
-            time.sleep(1)
+            # Don't clear connections on unexpected errors, just wait
+            time.sleep(1.0)
 
 
 def forward_ctrl(src_key, dst_key):
@@ -182,6 +247,7 @@ def forward_ctrl(src_key, dst_key):
     with improved buffer management and error handling
     """
     buffer = b""
+
     while True:
         # Get current connections under lock
         with connection_lock:
@@ -194,19 +260,27 @@ def forward_ctrl(src_key, dst_key):
             continue
 
         try:
-            # Set a reasonable timeout
-            src_sock.settimeout(1.0)
+            # Set a reasonable timeout - not too short
+            src_sock.settimeout(3.0)  # Increased timeout
 
             # Receive data
-            chunk = src_sock.recv(1024)
-            if not chunk:  # Connection closed
-                raise ConnectionResetError(f"Connection closed from {src_key}")
+            try:
+                chunk = src_sock.recv(1024)
+                if not chunk:  # Connection closed
+                    raise ConnectionResetError(f"Connection closed from {src_key}")
 
-            buffer += chunk
+                buffer += chunk
+            except socket.timeout:
+                # Timeout is not fatal, just continue
+                continue
 
             # Process complete messages
             while b'\n' in buffer:
-                line, buffer = buffer.split(b'\n', 1)
+                try:
+                    line, buffer = buffer.split(b'\n', 1)
+                except ValueError:
+                    # This shouldn't happen given the check above, but just in case
+                    break
 
                 # Skip empty lines
                 if not line.strip():
@@ -216,36 +290,53 @@ def forward_ctrl(src_key, dst_key):
                     # Validate JSON before forwarding
                     message = json.loads(line.decode('utf-8'))
 
-                    # Optional: Add message validation here
-
-                    # Forward to destination
-                    dst_sock.sendall(line + b'\n')
+                    # Forward valid JSON to destination
+                    try:
+                        dst_sock.sendall(line + b'\n')
+                    except Exception as e:
+                        logger.error(f"Error forwarding message to {dst_key}: {e}")
+                        # Mark destination as failed
+                        with connection_lock:
+                            if dst_key in connections and connections[dst_key] == dst_sock:
+                                try:
+                                    connections[dst_key].close()
+                                except:
+                                    pass
+                                connections[dst_key] = None
+                        break  # Exit inner loop, reset connections
 
                 except json.JSONDecodeError as e:
-                    logger.warning(f"Invalid JSON from {src_key}: {e}, data: {line[:100]}...")
+                    logger.warning(f"Invalid JSON from {src_key}: {e}, data: {line[:100]}")
                     # Skip this line, don't forward invalid JSON
+                    continue
 
-        except (ConnectionResetError, BrokenPipeError, socket.timeout) as e:
-            logger.info(f"Control {src_key} to {dst_key} error: {e}")
+        except (ConnectionResetError, BrokenPipeError) as e:
+            logger.info(f"Control {src_key} to {dst_key} connection error: {e}")
 
             # Clean up the affected connection
             with connection_lock:
                 if src_key in connections and connections[src_key] == src_sock:
                     try:
-                        connections[src_key].close()
-                    except Exception:
+                        src_sock.close()
+                    except:
                         pass
                     connections[src_key] = None
 
             # Reset buffer for new connection
             buffer = b""
 
-            # Short delay before retry
-            time.sleep(0.5)
+            # Longer delay before retry
+            time.sleep(1.0)
+
+        except socket.timeout:
+            # Timeout is not fatal, just continue
+            continue
 
         except Exception as e:
             logger.error(f"Unexpected error in forward_ctrl between {src_key} and {dst_key}: {e}")
-            time.sleep(1)
+            # Shorter delay for non-connection errors
+            time.sleep(0.5)
+
 
 def run_leds():
     """Thread that manages state of LEDs"""

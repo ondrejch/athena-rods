@@ -12,6 +12,7 @@ import struct
 from typing import Tuple, Optional, Dict, Any
 
 logger = logging.getLogger('SocketUtils')
+logger.setLevel(logging.INFO)  # Ensure we're capturing appropriate log level
 
 
 class SocketManager:
@@ -34,6 +35,7 @@ class SocketManager:
         self.buffer = b""
         self.reconnect_delay = 1  # Starting delay (seconds)
         self.max_delay = 30  # Maximum delay (seconds)
+        self._shutdown_requested = False
 
     def connect(self, timeout: float = 10.0) -> bool:
         """Connect to the server with timeout
@@ -44,18 +46,40 @@ class SocketManager:
         Returns:
             bool: True if connected successfully, False otherwise
         """
+        if self._shutdown_requested:
+            return False
+
         with self.lock:
             try:
+                # Clean up any existing socket first
                 if self.socket:
-                    self.close()
+                    try:
+                        self.socket.shutdown(socket.SHUT_RDWR)
+                    except:
+                        pass
+                    try:
+                        self.socket.close()
+                    except:
+                        pass
+                    self.socket = None
+                    self.connected = False
 
+                # Create new socket
                 self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.socket.settimeout(timeout)
+
+                # Connect and send handshake
+                logger.info(f"Attempting to connect to {self.host}:{self.port} ({self.handshake})")
                 self.socket.connect((self.host, self.port))
-                self.socket.sendall(self.handshake.encode('utf-8') + b'\n')
+
+                # Send handshake with newline
+                handshake_bytes = self.handshake.encode('utf-8') + b'\n'
+                self.socket.sendall(handshake_bytes)
+
+                # Connection successful
                 self.connected = True
                 self.reconnect_delay = 1  # Reset delay on successful connection
-                logger.info(f"Connected to {self.host}:{self.port} ({self.handshake})")
+                logger.info(f"Successfully connected to {self.host}:{self.port} ({self.handshake})")
                 return True
             except Exception as e:
                 logger.error(f"Connection failed to {self.host}:{self.port}: {e}")
@@ -63,7 +87,7 @@ class SocketManager:
                 if self.socket:
                     try:
                         self.socket.close()
-                    except:
+                    except Exception:
                         pass
                     self.socket = None
                 return False
@@ -71,6 +95,7 @@ class SocketManager:
     def close(self):
         """Close the socket connection safely"""
         with self.lock:
+            self._shutdown_requested = True
             if self.socket:
                 try:
                     self.socket.shutdown(socket.SHUT_RDWR)
@@ -83,6 +108,7 @@ class SocketManager:
                 finally:
                     self.socket = None
                     self.connected = False
+                    logger.info(f"Socket closed ({self.handshake})")
 
     def connect_with_backoff(self, max_attempts: Optional[int] = None) -> bool:
         """Connect with exponential backoff retry logic
@@ -93,16 +119,27 @@ class SocketManager:
         Returns:
             bool: True if connected successfully, False otherwise
         """
+        if self._shutdown_requested:
+            return False
+
         attempts = 0
         current_delay = self.reconnect_delay
 
-        while max_attempts is None or attempts < max_attempts:
+        while (max_attempts is None or attempts < max_attempts) and not self._shutdown_requested:
             if self.connect():
                 return True
 
             attempts += 1
             logger.info(f"Retrying connection in {current_delay}s (attempt {attempts})")
-            time.sleep(current_delay)
+
+            # Sleep with early exit possibility if shutdown requested
+            start_time = time.time()
+            while time.time() - start_time < current_delay:
+                if self._shutdown_requested:
+                    return False
+                time.sleep(0.1)
+
+            # Increase backoff delay for next attempt
             current_delay = min(current_delay * 2, self.max_delay)
 
         logger.error(f"Failed to connect after {attempts} attempts")
@@ -117,6 +154,9 @@ class SocketManager:
         Returns:
             bool: True if sent successfully, False otherwise
         """
+        if self._shutdown_requested:
+            return False
+
         with self.lock:
             if not self.connected:
                 if not self.connect_with_backoff(max_attempts=1):
@@ -155,6 +195,9 @@ class SocketManager:
         Returns:
             Tuple[bytes, bool]: (data, success) where success is True if received successfully
         """
+        if self._shutdown_requested:
+            return b"", False
+
         with self.lock:
             if not self.connected:
                 if not self.connect_with_backoff(max_attempts=1):
@@ -167,6 +210,9 @@ class SocketManager:
                     self.connected = False
                     return b"", False
                 return data, True
+            except socket.timeout:
+                # Timeout is not a connection error, just no data available
+                return b"", True
             except Exception as e:
                 logger.error(f"Error receiving data: {e}")
                 self.connected = False
@@ -182,20 +228,36 @@ class SocketManager:
         Returns:
             Tuple[bytes, bool]: (data, success) where success is True if received successfully
         """
+        if self._shutdown_requested:
+            return b"", False
+
         result = b""
         end_time = time.time() + timeout
 
-        while len(result) < size and time.time() < end_time:
+        while len(result) < size and time.time() < end_time and not self._shutdown_requested:
             remaining = size - len(result)
+
+            # Use shorter timeouts for individual receives to allow for shutdown checks
+            with self.lock:
+                if self.socket:
+                    self.socket.settimeout(min(0.5, end_time - time.time()))
+
             chunk, success = self.receive(remaining)
-            if not success:
+
+            if self._shutdown_requested:
                 return b"", False
 
-            result += chunk
-            if len(result) == size:
-                return result, True
+            if not success:
+                # Only return failure if it's an actual error, not a timeout
+                if not chunk:
+                    return b"", False
 
-            # Small delay to avoid tight loop
+            if chunk:
+                result += chunk
+                if len(result) == size:
+                    return result, True
+
+            # Small delay to avoid tight loop, check for shutdown
             time.sleep(0.01)
 
         return result, len(result) == size
@@ -206,23 +268,38 @@ class SocketManager:
         Returns:
             Tuple[Dict[str, Any], bool]: (data, success) where success is True if received successfully
         """
+        if self._shutdown_requested:
+            return {}, False
+
         with self.lock:
             try:
+                # Use a smaller timeout for individual receives
+                if self.socket:
+                    self.socket.settimeout(0.5)
+
                 data, success = self.receive(1024)
-                if not success:
+                if not success and not data:  # Allow empty data with success=True (timeout)
                     return {}, False
 
-                self.buffer += data
+                if data:  # Only process if we got actual data
+                    self.buffer += data
+
                 if b'\n' not in self.buffer:
-                    return {}, False
+                    return {}, True  # No complete message yet, but connection is good
 
+                # We have at least one complete message
                 line, self.buffer = self.buffer.split(b'\n', 1)
-                result = json.loads(line.decode('utf-8'))
-                return result, True
-            except json.JSONDecodeError as e:
-                logger.error(f"Invalid JSON received: {e}")
-                # Don't reset connection for JSON decode errors
-                return {}, False
+                if not line:  # Empty line, just a newline
+                    return {}, True
+
+                try:
+                    result = json.loads(line.decode('utf-8'))
+                    return result, True
+                except json.JSONDecodeError as e:
+                    logger.error(f"Invalid JSON received: {e}, data: {line[:100]}")
+                    # Don't reset connection for JSON decode errors
+                    return {}, True
+
             except Exception as e:
                 logger.error(f"Error receiving JSON data: {e}")
                 self.connected = False
