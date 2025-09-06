@@ -208,20 +208,25 @@ def ctrl_receiver():
             # Receive a complete JSON message
             data, success = ctrl_socket.receive_json()
 
-            if success and data:
-                logger.debug(f"Received control data: {data}")
-                # Put in queue for processing by main thread
-                try:
-                    ctrl_status_q.put_nowait(data)
-                except queue.Full:
-                    # Make room by removing oldest item
+            if success:
+                if data:  # Only process if we have actual data
+                    logger.debug(f"Received control data: {data}")
+                    # Put in queue for processing by main thread
                     try:
-                        ctrl_status_q.get_nowait()
                         ctrl_status_q.put_nowait(data)
-                    except (queue.Empty, queue.Full):
-                        logger.warning("Control queue management error")
+                    except queue.Full:
+                        # Make room by removing oldest item
+                        try:
+                            ctrl_status_q.get_nowait()
+                            ctrl_status_q.put_nowait(data)
+                        except (queue.Empty, queue.Full):
+                            logger.warning("Control queue management error")
+                # Don't wait if we had a successful read, even without data
+                # This allows more responsive processing of partial messages
+                time.sleep(0.1)
             else:
-                stop_event.wait(timeout=1)        # Wait before retry
+                # Connection issue, wait longer before retry
+                stop_event.wait(timeout=1)
 
         except Exception as e:
             logger.error(f"Control receiver error: {e}")
@@ -265,6 +270,8 @@ def main():
     # Initialize socket connections with retries
     stream_socket.connect_with_backoff()
     ctrl_socket.connect_with_backoff()
+    logger.info(f"Stream socket connected: {stream_socket.connected}")
+    logger.info(f"Control socket connected: {ctrl_socket.connected}")
 
     # Start control message receiver
     threading.Thread(target=ctrl_receiver, daemon=True).start()
