@@ -253,7 +253,7 @@ def create_empty_figure(title, y_axis_title, theme="light"):
 
 
 # Initialize app with configuration to handle callback exceptions
-app = Dash(__name__)
+app = Dash(__name__, external_stylesheets=['https://codepen.io/chriddyp/pen/bWLwgP.css'])
 app.config.suppress_callback_exceptions = True
 
 # Dashboard layout with pre-initialized components
@@ -261,57 +261,35 @@ app.layout = html.Div([
     # Store theme state
     dcc.Store(id='theme-store', data={'theme': 'light'}),
 
-    html.H1("ATHENA Rods Visualization", id='main-title'),
-
-    # Control bar
+    # First row: Heading and controls
     html.Div([
-        html.Button(
-            'Clear Plots',
-            id='reset-btn',
-            n_clicks=0,
-            style={'margin-right': '10px', 'background-color': '#f44336', 'color': 'white', 'border': 'none',
-                   'padding': '10px 16px', 'borderRadius': '6px', 'cursor': 'pointer'}
-        ),
-        html.Button(
-            '🌙 Dark Mode',
-            id='theme-toggle',
-            n_clicks=0,
-            style={'margin-right': '20px', 'background-color': '#333', 'color': 'white', 'border': 'none',
-                   'padding': '10px 16px', 'borderRadius': '6px', 'cursor': 'pointer'}
-        ),
-        html.Div(
-            "Connecting to control box...", id="connection-status",
-            style={'display': 'inline-block', 'margin': '10px', 'padding': '10px',
-                   'border': '1px solid #ddd', 'min-width': '260px', 'borderRadius': '6px'}
-        ),
-    ], style={'margin-bottom': '20px'}, id='control-bar'),
-
-    # First row: Neutron density graph and rod position
-    html.Div([
+        # Left side: Heading, buttons, status
         html.Div([
-            html.H2("Live Neutron Density", style=LIGHT_THEME['section_title_style'], id='neutron-title'),
+            html.H1("ATHENA Rods Visualization", id='main-title', style={'margin-top': '0px'}),
             html.Div([
-                dcc.Graph(id="neutron-graph", figure=create_empty_figure("Live Neutron Density", "Neutron Density")),
-            ], style=LIGHT_THEME['card_style'], id='neutron-card'),
+                html.Button(
+                    'Clear Plots',
+                    id='reset-btn',
+                    n_clicks=0,
+                    style={'margin-right': '10px', 'background-color': '#f44336', 'color': 'white', 'border': 'none',
+                           'padding': '10px 16px', 'borderRadius': '6px', 'cursor': 'pointer'}
+                ),
+                html.Button(
+                    '🌙 Dark Mode',
+                    id='theme-toggle',
+                    n_clicks=0,
+                    style={'margin-right': '20px', 'background-color': '#333', 'color': 'white', 'border': 'none',
+                           'padding': '10px 16px', 'borderRadius': '6px', 'cursor': 'pointer'}
+                ),
+            ]),
+            html.Div(
+                "Connecting to control box...", id="connection-status",
+                style={'display': 'inline-block', 'margin-top': '20px', 'padding': '10px',
+                       'border': '1px solid #ddd', 'min-width': '260px', 'borderRadius': '6px'}
+            ),
         ], className='six columns', style={'paddingRight': '10px'}),
 
-        html.Div([
-            html.H2("Control Rod Position", style=LIGHT_THEME['section_title_style'], id='position-title'),
-            html.Div([
-                dcc.Graph(id="position-graph", figure=create_empty_figure("Control Rod Position", "Position (cm)")),
-            ], style=LIGHT_THEME['card_style'], id='position-card'),
-        ], className='six columns', style={'paddingLeft': '10px'}),
-    ], className='row', id='first-row'),
-
-    # Second row: Reactivity graph and controls
-    html.Div([
-        html.Div([
-            html.H2("Reactivity", style=LIGHT_THEME['section_title_style'], id='reactivity-title'),
-            html.Div([
-                dcc.Graph(id="reactivity-graph", figure=create_empty_figure("Reactivity", "Reactivity (ρ)")),
-            ], style=LIGHT_THEME['card_style'], id='reactivity-card'),
-        ], className='six columns', style={'paddingRight': '10px'}),
-
+        # Right side: Control settings
         html.Div([
             html.H3("Control Settings", style=LIGHT_THEME['section_title_style'], id='controls-title'),
 
@@ -350,7 +328,31 @@ app.layout = html.Div([
 
             html.Div(id='send-status', style={'minHeight': '24px', 'marginTop': '10px'}),
         ], className='six columns', style={'paddingLeft': '10px', **LIGHT_THEME['card_style']}, id='controls-card'),
+    ], className='row', id='first-row', style={'marginBottom': '20px'}),
+
+    # Second row: Neutron density graph
+    html.Div([
+        html.H2("Live Neutron Density", style=LIGHT_THEME['section_title_style'], id='neutron-title'),
+        html.Div([
+            dcc.Graph(id="neutron-graph", figure=create_empty_figure("Live Neutron Density", "Neutron Density")),
+        ], style=LIGHT_THEME['card_style'], id='neutron-card'),
     ], className='row', id='second-row'),
+
+    # Third row: Reactivity graph
+    html.Div([
+        html.H2("Reactivity", style=LIGHT_THEME['section_title_style'], id='reactivity-title'),
+        html.Div([
+            dcc.Graph(id="reactivity-graph", figure=create_empty_figure("Reactivity", "Reactivity (ρ)")),
+        ], style=LIGHT_THEME['card_style'], id='reactivity-card'),
+    ], className='row', id='third-row'),
+
+    # Fourth row: Control Rod Position graph
+    html.Div([
+        html.H2("Control Rod Position", style=LIGHT_THEME['section_title_style'], id='position-title'),
+        html.Div([
+            dcc.Graph(id="position-graph", figure=create_empty_figure("Control Rod Position", "Position (cm)")),
+        ], style=LIGHT_THEME['card_style'], id='position-card'),
+    ], className='row', id='fourth-row'),
 
     # Hidden div for storing intermediate state
     html.Div(id='app-state', style={'display': 'none'}),
@@ -466,7 +468,7 @@ def update_card_styles(theme_data):
         theme_dict['card_style'],
         theme_dict['card_style'],
         theme_dict['card_style'],
-        theme_dict['card_style'],
+        {'paddingLeft': '10px', **theme_dict['card_style']},
         theme_dict['section_title_style'],
         theme_dict['section_title_style'],
         theme_dict['section_title_style'],
@@ -638,48 +640,43 @@ def update_plots(app_state_json, theme_data):
 
         # Set connection status and style
         connection_status = state.get('connection_status', "Checking connection...")
+        base_status_style = {
+            'display': 'inline-block',
+            'margin-top': '20px',
+            'padding': '10px',
+            'border-radius': '6px',
+            'min-width': '260px',
+        }
 
         if "✓ Connected" in connection_status:
             if theme == 'dark':
                 status_style = {
-                    'display': 'inline-block',
-                    'margin': '10px',
-                    'padding': '10px',
+                    **base_status_style,
                     'border': '1px solid #375a37',
                     'backgroundColor': '#2a3a2a',
                     'color': '#7cfc00',
-                    'borderRadius': '6px'
                 }
             else:
                 status_style = {
-                    'display': 'inline-block',
-                    'margin': '10px',
-                    'padding': '10px',
+                    **base_status_style,
                     'border': '1px solid #ddd',
                     'backgroundColor': '#dff0d8',
                     'color': '#3c763d',
-                    'borderRadius': '6px'
                 }
         else:
             if theme == 'dark':
                 status_style = {
-                    'display': 'inline-block',
-                    'margin': '10px',
-                    'padding': '10px',
+                    **base_status_style,
                     'border': '1px solid #5a4a20',
                     'backgroundColor': '#3a3020',
                     'color': '#ffd700',
-                    'borderRadius': '6px'
                 }
             else:
                 status_style = {
-                    'display': 'inline-block',
-                    'margin': '10px',
-                    'padding': '10px',
+                    **base_status_style,
                     'border': '1px solid #ddd',
                     'backgroundColor': '#fcf8e3',
                     'color': '#8a6d3b',
-                    'borderRadius': '6px'
                 }
 
         return neutron_fig, position_fig, reactivity_fig, connection_status, status_style
