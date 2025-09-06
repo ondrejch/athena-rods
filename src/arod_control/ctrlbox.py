@@ -72,6 +72,8 @@ connections = {
     "ctrl_display": None,
 }
 lock = threading.Lock()
+server_stream: (socket.socket, None) = None
+server_ctrl: (socket.socket, None) = None
 
 
 def accept_connections(server, role, conn_key):
@@ -108,7 +110,7 @@ def forward_stream(src_key, dst_key):
         if not src_sock or not dst_sock:
             continue
         try:
-            data = src_sock.recv(8)  # 2 floats, neutron_density and reactivity
+            data = src_sock.recv(12)  # 3 floats: neutron_density, reactivity, and distance
             if not data:
                 break
             dst_sock.sendall(data)
@@ -243,6 +245,8 @@ def run_auth():
 
 
 def main_loop():
+    global server_stream, server_ctrl
+
     # Start all threads
 
     # LED driver
@@ -269,12 +273,14 @@ def main_loop():
     # Stream sockets
     HOST = '0.0.0.0'  # Localhost
     server_stream = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_stream.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_stream.bind((HOST, PORT_STREAM))
     server_stream.listen(5)
     logger.info(f"Control computer listening for streaming on {PORT_STREAM}")
 
     # Control sockets
     server_ctrl = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_ctrl.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     server_ctrl.bind((HOST, PORT_CTRL))
     server_ctrl.listen(5)
     logger.info(f"Control computer listening for messages on {PORT_STREAM}")
@@ -298,4 +304,14 @@ def main_loop():
 
 if __name__ == "__main__":
     logger.info("*** ATHENA rods Control Box started ***")
-    main_loop()
+    try:
+        main_loop()
+    except KeyboardInterrupt:
+        logger.info("Ctrl+C detected, shutting down sockets and threads...")
+        try:
+            server_stream.close()
+            server_ctrl.close()
+        except Exception as e:
+            logger.warning(f"Error closing sockets: {e}")
+        # Optionally join threads here if they are not daemon
+        logger.info("Shutdown complete.")

@@ -14,5 +14,7 @@ setup(
         "python-sensors",
         "gpiozero",
         "spidev",
+        "scipy",
+        "numpy"
     ],
 )

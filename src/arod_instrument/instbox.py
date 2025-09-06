@@ -7,7 +7,6 @@ Ondrej Chvala <ochvala@utexas.edu>
 import logging
 import socket
 import time
-import random
 import struct
 import json
 import threading
@@ -38,22 +37,26 @@ console_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
+
 def limit_switch_pressed():
     motor.stop()
     switch_msg = {"type": "limit_switch", "value": "pressed"}
     sock.sendall((json.dumps(switch_msg) + '\n').encode('utf-8'))
 
+
 def limit_swich_released():
     switch_msg = {"type": "limit_switch", "value": "released"}
     sock.sendall((json.dumps(switch_msg) + '\n').encode('utf-8'))
 
+
 limit_switch.when_pressed = limit_switch_pressed
 limit_switch.when_released = limit_swich_released
+
 
 def rod_lift():
     """ Temprarily overwrites limit switch to lift the rod reliably """
     rod_engage()
-    limit_switch.when_pressed = None  
+    limit_switch.when_pressed = None
     motor.up()
     time.sleep(0.7)
     motor.stop()
@@ -215,7 +218,6 @@ def main():
         None
     Returns:
         None: This function does not return any value."""
-    logger.info("Instrumentation computer started.")
     threading.Thread(target=update_speed_of_sound, daemon=True).start()
 
     stream_sock = connect_with_retry(CONTROL_IP, PORT_STREAM, "stream_instr")
@@ -236,4 +238,14 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    logger.info("Instrumentation computer started.")
+    global stream_sock, ctrl_sock
+    try:
+        main()
+    except KeyboardInterrupt:
+        logger.info("Ctrl+C detected, shutting down sockets and threads...")
+        try:
+            stream_sock.close()
+            ctrl_sock.close()
+        except Exception as e:
+            logger.warning(f"Error closing sockets: {e}")

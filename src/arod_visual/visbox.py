@@ -50,7 +50,7 @@ def stream_receiver(sock):
             if not data or len(data) < 8:
                 break
             neutron_density, rho, position = struct.unpack('!fff', data)
-            stream_data_q.put((neutron_density, position))
+            stream_data_q.put((neutron_density, rho,  position))
     except Exception as e:
         print("Stream receive error:", e)
 
@@ -112,7 +112,7 @@ def update_plot(n):
     neutron_vals = []
     x_vals = []
     while not stream_data_q.empty():
-        dens, pos = stream_data_q.get()
+        dens, rho, pos = stream_data_q.get()
         neutron_vals.append(dens)
         x_vals.append(len(neutron_vals))
     fig = dcc.Graph(
@@ -152,5 +152,11 @@ def send_settings(n_clicks, motor_set, servo_set, source_set):
 
 
 if __name__ == "__main__":
-    start_connections()
-    app.run_server(debug=False)
+    try:
+        start_connections()
+        app.run(debug=False)
+    except KeyboardInterrupt:
+        global stream_sock, ctrl_sock
+        print("Ctrl+C detected, closing sockets...")
+        stream_sock.close()
+        ctrl_sock.close()

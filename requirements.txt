@@ -5,3 +5,6 @@ python-sensors
 gpiozero
 spidev
 dash
+numpy
+matplotlib
+SciPy
