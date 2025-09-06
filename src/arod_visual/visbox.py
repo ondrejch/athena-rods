@@ -19,14 +19,7 @@ ctrl_status_q = queue.Queue()
 
 
 def connect_with_retry(host, port, handshake, delay=5):
-    """Connect to a server with retry logic until successful.
-    Parameters:
-        - host (str): The server's hostname or IP address to connect to.
-        - port (int): The server's port number to connect to.
-        - handshake (str): The handshake message to be sent upon connection.
-        - delay (int, optional): The number of seconds to wait before retrying a failed connection attempt. Defaults to 5.
-    Returns:
-        - socket.socket: The connected socket object upon a successful connection."""
+    """Connect to a server with retry logic until successful."""
     while True:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -37,27 +30,27 @@ def connect_with_retry(host, port, handshake, delay=5):
             print(f"Retrying connection to {handshake} on {host}:{port}. Reason: {e}")
             time.sleep(delay)
 
+COUNTER = 0
 
 def stream_receiver():
     """Receives and processes continuous data stream from a socket."""
-    global stream_sock
+    global stream_sock, COUNTER
     while True:
         try:
             data = stream_sock.recv(12)
+            COUNTER += 1
             if not data or len(data) < 12:
-                print("Stream socket closed, reconnecting...")
-                stream_sock.close()
-                stream_sock = connect_with_retry(CONTROL_IP, PORT_STREAM, "stream_display")
-                continue
+                break
             neutron_density, rho, position = struct.unpack('!fff', data)
             stream_data_q.put((neutron_density, rho, position))
-            print(neutron_density, rho, position)
+            if COUNTER % 100 == 0:
+                print(neutron_density, rho, position)
         except Exception as e:
             print("Stream receive error:", e)
             try:
                 stream_sock.close()
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Stream closing socket error: {e}")
             stream_sock = connect_with_retry(CONTROL_IP, PORT_STREAM, "stream_display")
 
 
@@ -69,24 +62,18 @@ def ctrl_receiver():
         try:
             msg = ctrl_sock.recv(1024)
             if not msg:
-                print("Ctrl socket closed, reconnecting...")
-                ctrl_sock.close()
-                ctrl_sock = connect_with_retry(CONTROL_IP, PORT_CTRL, "ctrl_display")
-                buffer = b""
-                continue
+                break
             buffer += msg
             while b'\n' in buffer:
                 line, buffer = buffer.split(b'\n', 1)
-                try:
-                    ctrl_status_q.put(json.loads(line.decode('utf-8')))
-                except:
-                    continue
+                ctrl_status_q.put(json.loads(line.decode('utf-8')))
+
         except Exception as e:
             print(f"Ctrl receive error: {e}")
             try:
                 ctrl_sock.close()
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Ctrl closing socket error: {e}")
             ctrl_sock = connect_with_retry(CONTROL_IP, PORT_CTRL, "ctrl_display")
             buffer = b""
 
@@ -174,6 +161,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("Ctrl+C detected, closing sockets...")
         try:
+            global stream_sock, ctrl_sock
             stream_sock.close()
             ctrl_sock.close()
         except Exception as e:

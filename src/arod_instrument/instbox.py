@@ -139,6 +139,7 @@ def connect_with_retry(host, port, handshake, delay=1, max_retries=None):
         - socket: The connected socket object upon successful connection."""
     attempts = 0
     current_delay = delay
+    s: (socket.socket, None) = None
 
     while True:
         try:
