@@ -13,6 +13,7 @@ from arod_control.leds import LEDs
 from arod_control.display import Display
 from arod_control.authorization import RFID_Authorization, FaceAuthorization
 from arod_control import PORT_CTRL, PORT_STREAM  # Socket settings
+from arod_control.socket_utils import StreamingPacket  # For packet size (now 4 floats)
 
 # Configuration
 FAKE_FACE_AUTH: bool = True  # FAKE face authorization, use for development only!!
@@ -56,7 +57,6 @@ console_handler.setFormatter(formatter)
 # Add handlers to logger
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
-
 # SOCKET communications setup
 connections = {"stream_instr": None, "stream_display": None, "ctrl_instr": None, "ctrl_display": None}
 connection_lock = threading.Lock()
@@ -197,6 +197,7 @@ def forward_stream(src_key, dst_key):
     with robust error handling and reconnection logic
     """
     buffer = b""  # Buffer to accumulate partial messages
+    packet_size = StreamingPacket.PACKET_SIZE_QUAD  # Now forwarding 4 floats (16 bytes)
 
     while not stop_event.is_set():
         # Get current connections under lock
@@ -224,9 +225,9 @@ def forward_stream(src_key, dst_key):
                 # Timeout is not fatal, just continue
                 continue
 
-            # Process complete packets of 12 bytes (3 floats)
-            while len(buffer) >= 12:
-                packet, buffer = buffer[:12], buffer[12:]
+            # Process complete packets (now 16 bytes)
+            while len(buffer) >= packet_size:
+                packet, buffer = buffer[:packet_size], buffer[packet_size:]
 
                 # Try to forward the packet
                 try:
