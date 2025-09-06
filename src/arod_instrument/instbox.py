@@ -48,6 +48,7 @@ ctrl_socket = SocketManager(CONTROL_IP, PORT_CTRL, "ctrl_instr")
 # Communication queues
 ctrl_status_q = queue.Queue(maxsize=100)  # Limit size to prevent memory issues
 stop_event = threading.Event()
+g_rod_distance: float = -999  # Current CR distance
 
 
 def limit_switch_pressed():
@@ -90,10 +91,11 @@ def process_ctrl_status():
 
                     logger.info(f"Received settings: motor={motor_set}, servo={servo_set}, source={source_set}")
 
+                    global g_rod_distance
                     if motor_set == 1:
                         if limit_switch.is_pressed:
                             rod_lift()
-                        if get_distance() < MAX_ROD_DISTANCE:
+                        if g_rod_distance < MAX_ROD_DISTANCE:
                             motor.up()
                         else:
                             motor.stop()
@@ -173,6 +175,8 @@ class Reactivity:
         """Reads sonar distance, turns it into reactivity"""
         try:
             self.distance = self.cr_pos()
+            global g_rod_distance
+            g_rod_distance = self.distance
             return (self.distance - self.cr_zero_rho) * self.delta_rho / self.cr_delta
         except Exception as e:
             logger.error(f"Error getting reactivity: {e}")
@@ -253,9 +257,9 @@ def ctrl_receiver():
             stop_event.wait(timeout=1)
 
 
-def stream_sender(cr_reactivity, update_event):
+def stream_sender(update_event):
     """Send stream data to control box"""
-    global power_calculator
+    global power_calculator, g_rod_distance
     counter: int = 0
     while not stop_event.is_set():
         try:
@@ -266,7 +270,7 @@ def stream_sender(cr_reactivity, update_event):
                 # Get current values
                 neutron_density = power_calculator.current_neutron_density
                 rho = power_calculator.current_rho
-                distance = cr_reactivity.distance
+                distance = g_rod_distance
                 ts_ms = time.time() * 1000.0  # milliseconds since epoch (float64)
 
                 if counter % 10 == 0:
@@ -315,7 +319,7 @@ def main():
     threading.Thread(target=process_ctrl_status, daemon=True).start()
 
     # Start stream sender
-    threading.Thread(target=stream_sender, args=(cr_reactivity, update_event), daemon=True).start()
+    threading.Thread(target=stream_sender, args=update_event, daemon=True).start()
 
     logger.info("All threads started, entering main loop")
 
