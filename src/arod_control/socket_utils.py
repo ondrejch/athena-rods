@@ -93,22 +93,41 @@ class SocketManager:
                 return False
 
     def close(self):
-        """Close the socket connection safely"""
-        with self.lock:
-            self._shutdown_requested = True
-            if self.socket:
-                try:
-                    self.socket.shutdown(socket.SHUT_RDWR)
-                except Exception:
-                    pass
-                try:
-                    self.socket.close()
-                except Exception as e:
-                    logger.warning(f"Error closing socket: {e}")
-                finally:
+        """Close the socket connection safely with timeout to prevent deadlocks"""
+        self._shutdown_requested = True  # Set this flag outside the lock
+
+        # Try to acquire lock with timeout
+        lock_acquired = False
+        try:
+            lock_acquired = self.lock.acquire(timeout=2.0)  # 2 second timeout
+            if lock_acquired:
+                if self.socket:
+                    try:
+                        self.socket.shutdown(socket.SHUT_RDWR)
+                    except Exception:
+                        pass
+                    try:
+                        self.socket.close()
+                    except Exception as e:
+                        logger.warning(f"Error closing socket: {e}")
+                    finally:
+                        self.socket = None
+                        self.connected = False
+                        logger.info(f"Socket closed ({self.handshake})")
+            else:
+                logger.warning(f"Could not acquire lock to close socket {self.handshake} cleanly")
+                # Force close without lock if we couldn't acquire it
+                if self.socket:
+                    try:
+                        self.socket.close()
+                        logger.info(f"Socket {self.handshake} force-closed without lock")
+                    except Exception:
+                        pass
                     self.socket = None
                     self.connected = False
-                    logger.info(f"Socket closed ({self.handshake})")
+        finally:
+            if lock_acquired:
+                self.lock.release()
 
     def connect_with_backoff(self, max_attempts: Optional[int] = None) -> bool:
         """Connect with exponential backoff retry logic

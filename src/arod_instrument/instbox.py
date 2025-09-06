@@ -261,22 +261,15 @@ def stream_sender(power_calculator, cr_reactivity, update_event):
 
 def main():
     """Main function that initializes all components and starts threads"""
-    # Track all threads for proper cleanup
-    all_threads = []
-
     # Start speed of sound update thread
-    sos_thread = threading.Thread(target=update_speed_of_sound, daemon=True)
-    sos_thread.start()
-    all_threads.append(sos_thread)
+    threading.Thread(target=update_speed_of_sound, daemon=True).start()
 
     # Initialize socket connections with retries
     stream_socket.connect_with_backoff()
     ctrl_socket.connect_with_backoff()
 
     # Start control message receiver
-    ctrl_thread = threading.Thread(target=ctrl_receiver, daemon=True)
-    ctrl_thread.start()
-    all_threads.append(ctrl_thread)
+    threading.Thread(target=ctrl_receiver, daemon=True).start()
 
     # Initialize reactivity calculation
     cr_reactivity = Reactivity()
@@ -286,67 +279,56 @@ def main():
     global power_calculator
     power_calculator = ReactorPowerCalculator(cr_reactivity.get_reactivity, dt=0.1, update_event=update_event)
     power_calculator.start()
-    all_threads.append(power_calculator)
 
     # Start stream sender
-    stream_thread = threading.Thread(target=stream_sender, args=(power_calculator, cr_reactivity, update_event),
-                                     daemon=True)
-    stream_thread.start()
-    all_threads.append(stream_thread)
+    threading.Thread(target=stream_sender, args=(power_calculator, cr_reactivity, update_event), daemon=True).start()
 
     # Start control message processor
-    ctrl_proc_thread = threading.Thread(target=process_ctrl_status, daemon=True)
-    ctrl_proc_thread.start()
-    all_threads.append(ctrl_proc_thread)
+    threading.Thread(target=process_ctrl_status, daemon=True).start()
 
     logger.info("All threads started, entering main loop")
 
-    # Return the threads for proper cleanup
-    return all_threads
+    # Main loop - could implement additional monitoring or management here
+    try:
+        while True:
+            time.sleep(5)  # Optional: Add health checking logic here
+    except KeyboardInterrupt:
+        logger.info("Keyboard interrupt detected, shutting down...")
+        return
 
 
 if __name__ == "__main__":
     logger.info("Instrumentation computer started.")
-    threads = []
-    global power_calculator
-
     try:
-        threads = main()
-
-        # Main thread monitors for keyboard interrupt
-        while not stop_event.is_set():
-            stop_event.wait(timeout=1.0)  # Check every second
-
+        main()
     except KeyboardInterrupt:
+        stop_event.set()
         logger.info("Shutting down on keyboard interrupt...")
-        stop_event.set()
     except Exception as e:
-        logger.error(f"Unhandled exception in main: {e}")
         stop_event.set()
+        logger.error(f"Unhandled exception in main: {e}")
     finally:
         # Clean shutdown
         logger.info("Closing sockets and cleaning up...")
-
-        # Set stop event to signal all threads
         stop_event.set()
 
-        # Stop the power calculator explicitly
+        global power_calculator
+        # Safely stop power calculator
+        if 'power_calculator' in globals() and power_calculator is not None:
+            try:
+                power_calculator.stop()  # Don't call join() - could deadlock if thread is stuck
+            except Exception as e:
+                logger.warning(f"Error stopping power calculator: {e}")
+
+        # Close sockets with some timeout protection
         try:
-            if 'power_calculator' in globals():
-                power_calculator.stop()
-                # Small wait to allow threads to notice the stop event
-                time.sleep(0.5)
+            stream_socket.close()
         except Exception as e:
-            logger.error(f"Error stopping power calculator: {e}")
+            logger.warning(f"Error closing stream socket: {e}")
 
-        # Close sockets
-        stream_socket.close()
-        ctrl_socket.close()
-
-        # Wait for non-daemon threads with timeout
-        for thread in threads:
-            if thread.is_alive() and not thread.daemon:
-                logger.info(f"Waiting for thread {thread.name} to terminate...")
-                thread.join(timeout=2.0)  # Wait up to 2 seconds per thread
+        try:
+            ctrl_socket.close()
+        except Exception as e:
+            logger.warning(f"Error closing ctrl socket: {e}")
 
         logger.info("Shutdown complete.")
