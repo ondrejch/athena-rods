@@ -17,8 +17,8 @@ from arod_control.socket_utils import SocketManager, StreamingPacket
 # External source for PKE
 SOURCE_STRENGTH: float = 5.0  # Default external neutron source strength when enabled
 
-# Limit on rod extension, 20 cm
-MAX_ROD_DISTANCE: float = 20.0
+# Limit on rod extension, 19 cm
+MAX_ROD_DISTANCE: float = 19.0
 
 # LOGGER
 logger = logging.getLogger('AIBox')  # ATHENA rods Instrumentation Box
@@ -48,7 +48,6 @@ ctrl_socket = SocketManager(CONTROL_IP, PORT_CTRL, "ctrl_instr")
 # Communication queues
 ctrl_status_q = queue.Queue(maxsize=100)  # Limit size to prevent memory issues
 stop_event = threading.Event()
-g_rod_distance: float = -999  # Current CR distance
 
 
 def limit_switch_pressed():
@@ -71,7 +70,7 @@ limit_switch.when_pressed = limit_switch_pressed
 limit_switch.when_released = limit_switch_released
 
 
-def process_ctrl_status():
+def process_ctrl_status(cr_reactivity):
     """Process control messages from the queue"""
     while not stop_event.is_set():
         try:
@@ -91,11 +90,11 @@ def process_ctrl_status():
 
                     logger.info(f"Received settings: motor={motor_set}, servo={servo_set}, source={source_set}")
 
-                    global g_rod_distance
                     if motor_set == 1:
                         if limit_switch.is_pressed:
                             rod_lift()
-                        if g_rod_distance < MAX_ROD_DISTANCE:
+                        # Access distance directly from the reactivity object
+                        if cr_reactivity.distance < MAX_ROD_DISTANCE:
                             motor.up()
                         else:
                             motor.stop()
@@ -158,7 +157,7 @@ class Reactivity:
         self.cr_max: float = 15.0  # Rod maximum controlled position [cm]
         self.delta_rho: float = 800.0e-5  # Range of reactivity covered, 800 pcm by default
         self.cr_pos = get_distance  # CR position from sonar
-        self.distance: float = -999.9  # Current CR position [cm]
+        self.distance: float = -999.9  # Current CR position [cm], the single source of truth
         assert self.cr_min < self.cr_max
 
     @property
@@ -172,14 +171,14 @@ class Reactivity:
         return self.cr_max - self.cr_min
 
     def get_reactivity(self) -> float:
-        """Reads sonar distance, turns it into reactivity"""
+        """Reads sonar distance, updates the internal state, and turns it into reactivity"""
         try:
+            # This method now updates the authoritative state
             self.distance = self.cr_pos()
-            global g_rod_distance
-            g_rod_distance = self.distance
             return (self.distance - self.cr_zero_rho) * self.delta_rho / self.cr_delta
         except Exception as e:
             logger.error(f"Error getting reactivity: {e}")
+            self.distance = -999.9 # Ensure distance is reset on error
             return 0.0  # Safe default
 
 
@@ -257,9 +256,9 @@ def ctrl_receiver():
             stop_event.wait(timeout=1)
 
 
-def stream_sender(update_event):
+def stream_sender(reactivity_obj, update_event):
     """Send stream data to control box"""
-    global power_calculator, g_rod_distance
+    global power_calculator
     counter: int = 0
     while not stop_event.is_set():
         try:
@@ -270,7 +269,8 @@ def stream_sender(update_event):
                 # Get current values
                 neutron_density = power_calculator.current_neutron_density
                 rho = power_calculator.current_rho
-                distance = g_rod_distance
+                # Access distance directly from the reactivity object
+                distance = reactivity_obj.distance
                 ts_ms = time.time() * 1000.0  # milliseconds since epoch (float64)
 
                 if counter % 10 == 0:
@@ -306,7 +306,7 @@ def main():
     # Start control message receiver
     threading.Thread(target=ctrl_receiver, daemon=True).start()
 
-    # Initialize reactivity calculation
+    # Initialize reactivity calculation - this object now holds the state
     cr_reactivity = Reactivity()
     update_event = threading.Event()
 
@@ -315,11 +315,11 @@ def main():
     power_calculator = ReactorPowerCalculator(cr_reactivity.get_reactivity, dt=0.1, update_event=update_event)
     power_calculator.start()
 
-    # Start control message processor
-    threading.Thread(target=process_ctrl_status, daemon=True).start()
+    # Start control message processor, passing the state-holding object
+    threading.Thread(target=process_ctrl_status, args=(cr_reactivity,), daemon=True).start()
 
-    # Start stream sender
-    threading.Thread(target=stream_sender, args=update_event, daemon=True).start()
+    # Start stream sender, passing the state-holding object
+    threading.Thread(target=stream_sender, args=(cr_reactivity, update_event), daemon=True).start()
 
     logger.info("All threads started, entering main loop")
 
