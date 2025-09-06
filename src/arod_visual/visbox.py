@@ -37,7 +37,7 @@ max_history = 5000  # Maximum number of points to store
 
 # Value bounds for validation
 VALUE_BOUNDS = {
-    "neutron": (-1.0, 1e6),     # Expected neutron density range
+    "neutron": (-1.0, 1e38),    # Expected neutron density range
     "rho": (-1.0, 1.0),         # Expected reactivity range
     "position": (0.0, 60.0)     # Expected position range in cm
 }
