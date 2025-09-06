@@ -48,28 +48,71 @@ VALUE_BOUNDS = {
 app_state = {
     "reset_count": 0,
     "connection_status": "Initializing...",
-    "last_update": datetime.datetime.now().strftime('%H:%M:%S')
+    "last_update": datetime.datetime.now().strftime('%H:%M:%S'),
+    "theme": "light"  # Default theme
 }
 
-# --- Styles ---
-CARD_STYLE = {
-    'border': '1px solid #e0e0e0',
-    'borderRadius': '10px',
-    'boxShadow': '0 2px 8px rgba(0, 0, 0, 0.08)',
-    'padding': '15px',
-    'backgroundColor': '#ffffff',
-    'marginBottom': '20px'
+# --- Theme Styles ---
+# Light theme (default)
+LIGHT_THEME = {
+    'background_color': '#ffffff',
+    'text_color': '#000000',
+    'card_style': {
+        'border': '1px solid #e0e0e0',
+        'borderRadius': '10px',
+        'boxShadow': '0 2px 8px rgba(0, 0, 0, 0.08)',
+        'padding': '15px',
+        'backgroundColor': '#ffffff',
+        'marginBottom': '20px'
+    },
+    'section_title_style': {
+        'margin': '0 0 10px 0',
+        'padding': '5px 0',
+        'borderBottom': '1px solid #eee',
+        'color': '#000000'
+    },
+    'slider_style': {
+        'marginTop': '10px',
+        'marginBottom': '20px'
+    },
+    'plot': {
+        'paper_bgcolor': '#ffffff',
+        'plot_bgcolor': '#ffffff',
+        'gridcolor': '#f0f0f0',
+        'zerolinecolor': '#e6e6e6',
+        'text_color': '#000000'
+    }
 }
 
-SECTION_TITLE_STYLE = {
-    'margin': '0 0 10px 0',
-    'padding': '5px 0',
-    'borderBottom': '1px solid #eee'
-}
-
-SLIDER_STYLE = {
-    'marginTop': '10px',
-    'marginBottom': '20px'
+# Dark theme
+DARK_THEME = {
+    'background_color': '#121212',
+    'text_color': '#ffffff',
+    'card_style': {
+        'border': '1px solid #333333',
+        'borderRadius': '10px',
+        'boxShadow': '0 2px 8px rgba(0, 0, 0, 0.3)',
+        'padding': '15px',
+        'backgroundColor': '#1e1e1e',
+        'marginBottom': '20px'
+    },
+    'section_title_style': {
+        'margin': '0 0 10px 0',
+        'padding': '5px 0',
+        'borderBottom': '1px solid #444444',
+        'color': '#ffffff'
+    },
+    'slider_style': {
+        'marginTop': '10px',
+        'marginBottom': '20px'
+    },
+    'plot': {
+        'paper_bgcolor': '#1e1e1e',
+        'plot_bgcolor': '#1e1e1e',
+        'gridcolor': '#333333',
+        'zerolinecolor': '#444444',
+        'text_color': '#ffffff'
+    }
 }
 
 # --- Helpers ---
@@ -181,28 +224,31 @@ def ctrl_receiver():
 
 
 # Create default empty figures to ensure consistent initialization
-def create_empty_figure(title, y_axis_title):
+def create_empty_figure(title, y_axis_title, theme="light"):
+    """Create an empty figure with the specified theme"""
+    theme_data = LIGHT_THEME if theme == "light" else DARK_THEME
+
     return {
         'data': [],
         'layout': {
-            'title': {'text': title, 'font': {'size': 22}},
+            'title': {'text': title, 'font': {'size': 22, 'color': theme_data['plot']['text_color']}},
             'xaxis': {
-                'title': {'text': 'Time (UTC)', 'font': {'size': 18}},
+                'title': {'text': 'Time (UTC)', 'font': {'size': 18, 'color': theme_data['plot']['text_color']}},
                 'type': 'date',
-                'tickfont': {'size': 14},
-                'gridcolor': '#f0f0f0',
-                'zerolinecolor': '#e6e6e6'
+                'tickfont': {'size': 14, 'color': theme_data['plot']['text_color']},
+                'gridcolor': theme_data['plot']['gridcolor'],
+                'zerolinecolor': theme_data['plot']['zerolinecolor']
             },
             'yaxis': {
-                'title': {'text': y_axis_title, 'font': {'size': 18}},
-                'tickfont': {'size': 14},
-                'gridcolor': '#f0f0f0',
-                'zerolinecolor': '#e6e6e6'
+                'title': {'text': y_axis_title, 'font': {'size': 18, 'color': theme_data['plot']['text_color']}},
+                'tickfont': {'size': 14, 'color': theme_data['plot']['text_color']},
+                'gridcolor': theme_data['plot']['gridcolor'],
+                'zerolinecolor': theme_data['plot']['zerolinecolor']
             },
             'margin': {'l': 60, 'r': 30, 'b': 60, 't': 60},
-            'paper_bgcolor': '#ffffff',
-            'plot_bgcolor': '#ffffff',
-            'legend': {'font': {'size': 14}}
+            'paper_bgcolor': theme_data['plot']['paper_bgcolor'],
+            'plot_bgcolor': theme_data['plot']['plot_bgcolor'],
+            'legend': {'font': {'size': 14, 'color': theme_data['plot']['text_color']}}
         }
     }
 
@@ -213,7 +259,10 @@ app.config.suppress_callback_exceptions = True
 
 # Dashboard layout with pre-initialized components
 app.layout = html.Div([
-    html.H1("ATHENA Rods Visualization"),
+    # Store theme state
+    dcc.Store(id='theme-store', data={'theme': 'light'}),
+
+    html.H1("ATHENA Rods Visualization", id='main-title'),
 
     # Control bar
     html.Div([
@@ -221,7 +270,14 @@ app.layout = html.Div([
             'Clear Plots',
             id='reset-btn',
             n_clicks=0,
-            style={'margin-right': '20px', 'background-color': '#f44336', 'color': 'white', 'border': 'none',
+            style={'margin-right': '10px', 'background-color': '#f44336', 'color': 'white', 'border': 'none',
+                   'padding': '10px 16px', 'borderRadius': '6px', 'cursor': 'pointer'}
+        ),
+        html.Button(
+            '🌙 Dark Mode',
+            id='theme-toggle',
+            n_clicks=0,
+            style={'margin-right': '20px', 'background-color': '#333', 'color': 'white', 'border': 'none',
                    'padding': '10px 16px', 'borderRadius': '6px', 'cursor': 'pointer'}
         ),
         html.Div(
@@ -229,39 +285,39 @@ app.layout = html.Div([
             style={'display': 'inline-block', 'margin': '10px', 'padding': '10px',
                    'border': '1px solid #ddd', 'min-width': '260px', 'borderRadius': '6px'}
         ),
-    ], style={'margin-bottom': '20px'}),
+    ], style={'margin-bottom': '20px'}, id='control-bar'),
 
     # First row: Neutron density graph and rod position
     html.Div([
         html.Div([
-            html.H2("Live Neutron Density", style=SECTION_TITLE_STYLE),
+            html.H2("Live Neutron Density", style=LIGHT_THEME['section_title_style'], id='neutron-title'),
             html.Div([
                 dcc.Graph(id="neutron-graph", figure=create_empty_figure("Live Neutron Density", "Neutron Density")),
-            ], style=CARD_STYLE),
+            ], style=LIGHT_THEME['card_style'], id='neutron-card'),
         ], className='six columns', style={'paddingRight': '10px'}),
 
         html.Div([
-            html.H2("Control Rod Position", style=SECTION_TITLE_STYLE),
+            html.H2("Control Rod Position", style=LIGHT_THEME['section_title_style'], id='position-title'),
             html.Div([
                 dcc.Graph(id="position-graph", figure=create_empty_figure("Control Rod Position", "Position (cm)")),
-            ], style=CARD_STYLE),
+            ], style=LIGHT_THEME['card_style'], id='position-card'),
         ], className='six columns', style={'paddingLeft': '10px'}),
-    ], className='row'),
+    ], className='row', id='first-row'),
 
     # Second row: Reactivity graph and controls
     html.Div([
         html.Div([
-            html.H2("Reactivity", style=SECTION_TITLE_STYLE),
+            html.H2("Reactivity", style=LIGHT_THEME['section_title_style'], id='reactivity-title'),
             html.Div([
                 dcc.Graph(id="reactivity-graph", figure=create_empty_figure("Reactivity", "Reactivity (ρ)")),
-            ], style=CARD_STYLE),
+            ], style=LIGHT_THEME['card_style'], id='reactivity-card'),
         ], className='six columns', style={'paddingRight': '10px'}),
 
         html.Div([
-            html.H3("Control Settings", style=SECTION_TITLE_STYLE),
+            html.H3("Control Settings", style=LIGHT_THEME['section_title_style'], id='controls-title'),
 
             html.Div([
-                html.Label("Motor Control (3-position switch):"),
+                html.Label("Motor Control (3-position switch):", id='motor-label'),
                 dcc.Slider(
                     id='motor-set',
                     min=-1, max=1, step=1, value=0,
@@ -269,10 +325,10 @@ app.layout = html.Div([
                     updatemode='mouseup',
                     tooltip={'always_visible': False, 'placement': 'bottom'}
                 ),
-            ], style=SLIDER_STYLE),
+            ], style=LIGHT_THEME['slider_style'], id='motor-control'),
 
             html.Div([
-                html.Label("Servo Control:"),
+                html.Label("Servo Control:", id='servo-label'),
                 dcc.Slider(
                     id='servo-set',
                     min=0, max=1, step=1, value=1,
@@ -280,10 +336,10 @@ app.layout = html.Div([
                     updatemode='mouseup',
                     tooltip={'always_visible': False, 'placement': 'bottom'}
                 ),
-            ], style=SLIDER_STYLE),
+            ], style=LIGHT_THEME['slider_style'], id='servo-control'),
 
             html.Div([
-                html.Label("Source Control:"),
+                html.Label("Source Control:", id='source-label'),
                 dcc.Slider(
                     id='source-set',
                     min=0, max=1, step=1, value=0,
@@ -291,11 +347,11 @@ app.layout = html.Div([
                     updatemode='mouseup',
                     tooltip={'always_visible': False, 'placement': 'bottom'}
                 ),
-            ], style=SLIDER_STYLE),
+            ], style=LIGHT_THEME['slider_style'], id='source-control'),
 
             html.Div(id='send-status', style={'minHeight': '24px', 'marginTop': '10px'}),
-        ], className='six columns', style={'paddingLeft': '10px', **CARD_STYLE}),
-    ], className='row'),
+        ], className='six columns', style={'paddingLeft': '10px', **LIGHT_THEME['card_style']}, id='controls-card'),
+    ], className='row', id='second-row'),
 
     # Hidden div for storing intermediate state
     html.Div(id='app-state', style={'display': 'none'}),
@@ -303,7 +359,7 @@ app.layout = html.Div([
     # Update interval
     dcc.Interval(id="interval", interval=500, n_intervals=0),
 
-], style={'padding': '20px', 'fontFamily': 'Arial'})
+], style={'padding': '20px', 'fontFamily': 'Arial', 'backgroundColor': LIGHT_THEME['background_color'], 'color': LIGHT_THEME['text_color']}, id='main-container')
 
 
 def start_connections():
@@ -318,6 +374,105 @@ def start_connections():
     threading.Thread(target=ctrl_receiver, daemon=True).start()
 
     logger.info("Socket connections and receiver threads started")
+
+
+# Callback to toggle theme
+@app.callback(
+    [Output('theme-store', 'data'),
+     Output('theme-toggle', 'children'),
+     Output('theme-toggle', 'style'),
+     Output('main-container', 'style')],
+    [Input('theme-toggle', 'n_clicks')],
+    [State('theme-store', 'data')]
+)
+def toggle_theme(n_clicks, theme_data):
+    """Toggle between light and dark themes"""
+    if n_clicks is None:
+        # Initial load - use default theme
+        return theme_data, '🌙 Dark Mode', {
+            'margin-right': '20px',
+            'background-color': '#333',
+            'color': 'white',
+            'border': 'none',
+            'padding': '10px 16px',
+            'borderRadius': '6px',
+            'cursor': 'pointer'
+        }, {
+            'padding': '20px',
+            'fontFamily': 'Arial',
+            'backgroundColor': LIGHT_THEME['background_color'],
+            'color': LIGHT_THEME['text_color']
+        }
+
+    # Toggle theme
+    new_theme = 'dark' if theme_data.get('theme') == 'light' else 'light'
+    theme_data['theme'] = new_theme
+
+    # Update button text and style
+    if new_theme == 'dark':
+        button_text = '☀️ Light Mode'
+        button_style = {
+            'margin-right': '20px',
+            'background-color': '#f8f9fa',
+            'color': '#333',
+            'border': 'none',
+            'padding': '10px 16px',
+            'borderRadius': '6px',
+            'cursor': 'pointer'
+        }
+        container_style = {
+            'padding': '20px',
+            'fontFamily': 'Arial',
+            'backgroundColor': DARK_THEME['background_color'],
+            'color': DARK_THEME['text_color']
+        }
+    else:
+        button_text = '🌙 Dark Mode'
+        button_style = {
+            'margin-right': '20px',
+            'background-color': '#333',
+            'color': 'white',
+            'border': 'none',
+            'padding': '10px 16px',
+            'borderRadius': '6px',
+            'cursor': 'pointer'
+        }
+        container_style = {
+            'padding': '20px',
+            'fontFamily': 'Arial',
+            'backgroundColor': LIGHT_THEME['background_color'],
+            'color': LIGHT_THEME['text_color']
+        }
+
+    return theme_data, button_text, button_style, container_style
+
+
+# Update card styles based on theme
+@app.callback(
+    [Output('neutron-card', 'style'),
+     Output('position-card', 'style'),
+     Output('reactivity-card', 'style'),
+     Output('controls-card', 'style'),
+     Output('neutron-title', 'style'),
+     Output('position-title', 'style'),
+     Output('reactivity-title', 'style'),
+     Output('controls-title', 'style')],
+    [Input('theme-store', 'data')]
+)
+def update_card_styles(theme_data):
+    theme = theme_data.get('theme', 'light')
+    theme_dict = DARK_THEME if theme == 'dark' else LIGHT_THEME
+
+    return (
+        theme_dict['card_style'],
+        theme_dict['card_style'],
+        theme_dict['card_style'],
+        theme_dict['card_style'],
+        theme_dict['section_title_style'],
+        theme_dict['section_title_style'],
+        theme_dict['section_title_style'],
+        theme_dict['section_title_style']
+    )
 
 
 # First callback to manage application state
@@ -392,27 +547,31 @@ def update_app_state(n_intervals, reset_clicks):
         return json.dumps({'error': str(e)})
 
 
-# Second callback to update UI elements based on app state
+# Second callback to update UI elements based on app state and theme
 @app.callback(
     [Output("neutron-graph", "figure"),
      Output("position-graph", "figure"),
      Output("reactivity-graph", "figure"),
      Output("connection-status", "children"),
      Output("connection-status", "style")],
-    [Input('app-state', 'children')]
+    [Input('app-state', 'children'),
+     Input('theme-store', 'data')]
 )
-def update_plots(app_state_json):
+def update_plots(app_state_json, theme_data):
     """Update all plots with the latest data (points + semi-transparent dashed trend line)"""
     global time_points, neutron_values, rho_values, position_values
+
+    theme = theme_data.get('theme', 'light')
+    theme_dict = DARK_THEME if theme == 'dark' else LIGHT_THEME
 
     try:
         # Parse app state
         state = json.loads(app_state_json) if app_state_json else {}
 
-        # Create default empty figures
-        neutron_fig = create_empty_figure("Live Neutron Density", "Neutron Density")
-        position_fig = create_empty_figure("Control Rod Position", "Position (cm)")
-        reactivity_fig = create_empty_figure("Reactivity", "Reactivity (ρ)")
+        # Create default empty figures with appropriate theme
+        neutron_fig = create_empty_figure("Live Neutron Density", "Neutron Density", theme)
+        position_fig = create_empty_figure("Control Rod Position", "Position (cm)", theme)
+        reactivity_fig = create_empty_figure("Reactivity", "Reactivity (ρ)", theme)
 
         # Add data if available
         if time_points:
@@ -482,25 +641,47 @@ def update_plots(app_state_json):
         connection_status = state.get('connection_status', "Checking connection...")
 
         if "✓ Connected" in connection_status:
-            status_style = {
-                'display': 'inline-block',
-                'margin': '10px',
-                'padding': '10px',
-                'border': '1px solid #ddd',
-                'backgroundColor': '#dff0d8',
-                'color': '#3c763d',
-                'borderRadius': '6px'
-            }
+            if theme == 'dark':
+                status_style = {
+                    'display': 'inline-block',
+                    'margin': '10px',
+                    'padding': '10px',
+                    'border': '1px solid #375a37',
+                    'backgroundColor': '#2a3a2a',
+                    'color': '#7cfc00',
+                    'borderRadius': '6px'
+                }
+            else:
+                status_style = {
+                    'display': 'inline-block',
+                    'margin': '10px',
+                    'padding': '10px',
+                    'border': '1px solid #ddd',
+                    'backgroundColor': '#dff0d8',
+                    'color': '#3c763d',
+                    'borderRadius': '6px'
+                }
         else:
-            status_style = {
-                'display': 'inline-block',
-                'margin': '10px',
-                'padding': '10px',
-                'border': '1px solid #ddd',
-                'backgroundColor': '#fcf8e3',
-                'color': '#8a6d3b',
-                'borderRadius': '6px'
-            }
+            if theme == 'dark':
+                status_style = {
+                    'display': 'inline-block',
+                    'margin': '10px',
+                    'padding': '10px',
+                    'border': '1px solid #5a4a20',
+                    'backgroundColor': '#3a3020',
+                    'color': '#ffd700',
+                    'borderRadius': '6px'
+                }
+            else:
+                status_style = {
+                    'display': 'inline-block',
+                    'margin': '10px',
+                    'padding': '10px',
+                    'border': '1px solid #ddd',
+                    'backgroundColor': '#fcf8e3',
+                    'color': '#8a6d3b',
+                    'borderRadius': '6px'
+                }
 
         return neutron_fig, position_fig, reactivity_fig, connection_status, status_style
 
