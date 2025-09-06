@@ -5,7 +5,7 @@ python-sensors
 gpiozero
 spidev
 dash
-numpy
+numpy<2
 matplotlib
 SciPy
 plotly

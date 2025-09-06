@@ -1,4 +1,7 @@
-""" Management of sensors and actuators connected to the Intrumentation box """
+"""
+Management of sensors and actuators connected to the Instrumentation box
+Ondrej Chvala <ochvala@utexas.edu>
+"""
 
 from gpiozero import DistanceSensor
 from gpiozero import Motor as OriginalMotor

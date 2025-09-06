@@ -1,3 +1,8 @@
+"""
+PKE solver for ATHENA-rors. Tracks power in real time.
+Ondrej Chvala <ochvala@utexas.edu>
+"""
+
 import numpy as np
 import time
 import threading
@@ -5,7 +10,7 @@ from solver import PointKineticsEquationSolver
 
 
 class ReactorPowerCalculator(threading.Thread):
-    """Initializes an instance of a class to manage reactor kinetics simulation.
+    """ Initializes an instance of a class to manage reactor kinetics simulation.
     Parameters:
         - get_reactivity (callable): A function that returns the reactivity at a given time.
         - dt (float, optional): The time step for the simulation. Default is 0.1.
@@ -14,7 +19,7 @@ class ReactorPowerCalculator(threading.Thread):
         - A threading.Event object is used to manage when the simulation should stop.
         - Simulation calculates neutron density over the specified time, dependent on reactor reactivity.
         - Results are stored as time, reactivity, and neutron density.
-        - Maintains real-time pacing by sleeping for the precise required duration."""
+        - Maintains real-time pacing by sleeping for the precise required duration. """
     def __init__(self, get_reactivity, dt=0.1, duration=None, update_event=None):
         """Initializes an instance of a class to manage reactor kinetics simulation.
         Parameters:
@@ -30,15 +35,16 @@ class ReactorPowerCalculator(threading.Thread):
         self.stop_event = threading.Event()
         self.results = []  # To store time, reactivity, power
         # Initialize solver with dummy reactivity function; will update each step
-        self.source_strength = 0.0  # Added source strength parameter
+        self.source_strength: float = 0.0  # Added source strength parameter
         self.solver = PointKineticsEquationSolver(
             lambda t: 0.0,
             source_func=lambda t: self.source_strength  # Use the class attribute for source
         )
-        self.current_neutron_density = 1.0
-        self.current_rho = 0.0
+        self.current_neutron_density: float = 1.0
+        self.MAX_REACTOR_POWER: float = 1e30
+        self.current_rho: float = 0.0
         self.update_event = update_event  # New event for signaling updates
-        self.DEBUG = 0
+        self.DEBUG: int = 0
 
     def set_source(self, strength):
         """Set the external neutron source strength
@@ -70,7 +76,7 @@ class ReactorPowerCalculator(threading.Thread):
         if self.DEBUG > 2:
             print(state)
 
-        t_current = 0.0
+        t_current: float = 0.0
         start_time = time.time()
 
         if self.DEBUG > 2:
@@ -81,7 +87,7 @@ class ReactorPowerCalculator(threading.Thread):
                 break
 
             # Get current reactivity
-            rho = self.get_reactivity()
+            rho: float = self.get_reactivity()
 
             # Define reactivity function constant over dt interval
             self.solver.reactivity_func = lambda t: rho
@@ -92,7 +98,7 @@ class ReactorPowerCalculator(threading.Thread):
             # print("SOL: ", sol)
             state = sol[1].flatten()
             # print("STATE: ", state)
-            if state[0] > 1e30:
+            if state[0] > self.MAX_REACTOR_POWER:
                 print(" *** POWER OVER 1e30, your reactor exploded! Resetting reactor kinetics. *** ")
                 n0 = 1.0
                 C0 = beta / (lambda_ * Lambda) * n0

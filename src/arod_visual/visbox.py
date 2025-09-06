@@ -36,6 +36,7 @@ neutron_values: List[float] = []
 rho_values: List[float] = []
 position_values: List[float] = []
 max_history: int = 5000  # Maximum number of points to store
+max_plot_points = 500  # Maximum number of points to display on plots
 
 # Value bounds for sanity validation
 VALUE_BOUNDS = {
@@ -63,7 +64,7 @@ LIGHT_THEME = {
         'boxShadow': '0 2px 8px rgba(0, 0, 0, 0.08)',
         'padding': '15px',
         'backgroundColor': '#ffffff',
-        'marginBottom': '20px'
+        'marginBottom': '10px'
     },
     'section_title_style': {
         'margin': '0 0 10px 0',
@@ -73,7 +74,7 @@ LIGHT_THEME = {
     },
     'slider_style': {
         'marginTop': '10px',
-        'marginBottom': '20px'
+        'marginBottom': '10px'
     },
     'plot': {
         'paper_bgcolor': '#ffffff',
@@ -94,7 +95,7 @@ DARK_THEME = {
         'boxShadow': '0 2px 8px rgba(0, 0, 0, 0.3)',
         'padding': '15px',
         'backgroundColor': '#1e1e1e',
-        'marginBottom': '20px'
+        'marginBottom': '10px'
     },
     'section_title_style': {
         'margin': '0 0 10px 0',
@@ -104,7 +105,7 @@ DARK_THEME = {
     },
     'slider_style': {
         'marginTop': '10px',
-        'marginBottom': '20px'
+        'marginBottom': '10px'
     },
     'plot': {
         'paper_bgcolor': '#1e1e1e',
@@ -232,14 +233,14 @@ def create_empty_figure(title, y_axis_title, theme="light"):
         'layout': {
             'title': {'text': title, 'font': {'size': 22, 'color': theme_data['plot']['text_color']}},
             'xaxis': {
-                'title': {'text': 'Time (UTC)', 'font': {'size': 18, 'color': theme_data['plot']['text_color']}},
+                'title': {'text': 'Time (UTC)', 'font': {'size': 20, 'color': theme_data['plot']['text_color']}},
                 'type': 'date',
                 'tickfont': {'size': 14, 'color': theme_data['plot']['text_color']},
                 'gridcolor': theme_data['plot']['gridcolor'],
                 'zerolinecolor': theme_data['plot']['zerolinecolor']
             },
             'yaxis': {
-                'title': {'text': y_axis_title, 'font': {'size': 18, 'color': theme_data['plot']['text_color']}},
+                'title': {'text': y_axis_title, 'font': {'size': 20, 'color': theme_data['plot']['text_color']}},
                 'tickfont': {'size': 14, 'color': theme_data['plot']['text_color']},
                 'gridcolor': theme_data['plot']['gridcolor'],
                 'zerolinecolor': theme_data['plot']['zerolinecolor']
@@ -261,104 +262,111 @@ app.layout = html.Div([
     # Store theme state
     dcc.Store(id='theme-store', data={'theme': 'light'}),
 
-    # First row: Heading and controls
+    # Main container for responsive scaling
     html.Div([
-        # Left side: Heading, buttons, status
+        # First row: Heading and controls
         html.Div([
-            html.H1("ATHENA Rods Visualization", id='main-title', style={'margin-top': '0px'}),
+            # Left side: Heading, buttons, status
             html.Div([
-                html.Button(
-                    'Clear Plots',
-                    id='reset-btn',
-                    n_clicks=0,
-                    style={'margin-right': '10px', 'background-color': '#f44336', 'color': 'white', 'border': 'none',
-                           'padding': '10px 16px', 'borderRadius': '6px', 'cursor': 'pointer'}
+                html.H1("ATHENA Rods Visualization", id='main-title', style={'margin-top': '0px'}),
+                html.Div([
+                    html.Button(
+                        'Clear Plots',
+                        id='reset-btn',
+                        n_clicks=0,
+                        style={'margin-right': '10px', 'background-color': '#f44336', 'color': 'white', 'border': 'none',
+                               'borderRadius': '6px', 'cursor': 'pointer'
+                        }
+                    ),
+                    html.Button(
+                        '🌙 Dark Mode',
+                        id='theme-toggle',
+                        n_clicks=0,
+                        style={'margin-right': '20px', 'background-color': '#333', 'color': 'white', 'border': 'none',
+                               'borderRadius': '6px', 'cursor': 'pointer'
+                        }
+                    ),
+                ]),
+                html.Div(
+                    "Connecting to control box...", id="connection-status",
+                    style={'display': 'inline-block', 'margin-top': '20px', 'padding': '10px',
+                           'border': '1px solid #ddd', 'min-width': '260px', 'borderRadius': '6px'
+                    }
                 ),
-                html.Button(
-                    '🌙 Dark Mode',
-                    id='theme-toggle',
-                    n_clicks=0,
-                    style={'margin-right': '20px', 'background-color': '#333', 'color': 'white', 'border': 'none',
-                           'padding': '10px 16px', 'borderRadius': '6px', 'cursor': 'pointer'}
-                ),
-            ]),
-            html.Div(
-                "Connecting to control box...", id="connection-status",
-                style={'display': 'inline-block', 'margin-top': '20px', 'padding': '10px',
-                       'border': '1px solid #ddd', 'min-width': '260px', 'borderRadius': '6px'}
-            ),
-        ], className='six columns', style={'paddingRight': '10px'}),
+            ], className='six columns', style={'paddingRight': '10px'}),
 
-        # Right side: Control settings
-        html.Div([
-            html.H3("Control Settings", style=LIGHT_THEME['section_title_style'], id='controls-title'),
-
+            # Right side: Control settings
             html.Div([
-                html.Label("Motor Control (3-position switch):", id='motor-label'),
-                dcc.Slider(
-                    id='motor-set',
-                    min=-1, max=1, step=1, value=0,
-                    marks={-1: {'label': 'Down (-1)'}, 0: {'label': 'Stop (0)'}, 1: {'label': 'Up (1)'}},
-                    updatemode='mouseup',
-                    tooltip={'always_visible': False, 'placement': 'bottom'}
-                ),
-            ], style=LIGHT_THEME['slider_style'], id='motor-control'),
+                html.H5("Control Settings", style=LIGHT_THEME['section_title_style'], id='controls-title'),
 
+                html.Div([
+                    html.Label("Motor Control (3-position switch):", id='motor-label', style={'fontSize': '1.2em'}),
+                    dcc.Slider(
+                        id='motor-set',
+                        min=-1, max=1, step=1, value=0,
+                        marks={-1: {'label': 'Down (-1)'}, 0: {'label': 'Stop (0)'}, 1: {'label': 'Up (1)'}},
+                        updatemode='mouseup',
+                        tooltip={'always_visible': False, 'placement': 'bottom'}
+                    ),
+                ], style=LIGHT_THEME['slider_style'], id='motor-control'),
+
+                html.Div([
+                    html.Label("Servo Control:", id='servo-label', style={'fontSize': '1.2em'}),
+                    dcc.Slider(
+                        id='servo-set',
+                        min=0, max=1, step=1, value=1,
+                        marks={0: {'label': 'Disengage (0)'}, 1: {'label': 'Engage (1)'}},
+                        updatemode='mouseup',
+                        tooltip={'always_visible': False, 'placement': 'bottom'}
+                    ),
+                ], style=LIGHT_THEME['slider_style'], id='servo-control'),
+
+                html.Div([
+                    html.Label("Source Control:", id='source-label', style={'fontSize': '1.2em'}),
+                    dcc.Slider(
+                        id='source-set',
+                        min=0, max=1, step=1, value=0,
+                        marks={0: {'label': 'Off (0)'}, 1: {'label': 'On (1)'}},
+                        updatemode='mouseup',
+                        tooltip={'always_visible': False, 'placement': 'bottom'}
+                    ),
+                ], style=LIGHT_THEME['slider_style'], id='source-control'),
+
+                html.Div(id='send-status', style={'minHeight': '24px', 'marginTop': '10px'}),
+            ], className='six columns', style={'paddingLeft': '10px', **LIGHT_THEME['card_style']}, id='controls-card'),
+        ], className='row', id='first-row', style={'marginBottom': '5px'}),
+
+        # Second row: Neutron density graph
+        html.Div([
+            html.H6("Live Neutron Density", style=LIGHT_THEME['section_title_style'], id='neutron-title'),
             html.Div([
-                html.Label("Servo Control:", id='servo-label'),
-                dcc.Slider(
-                    id='servo-set',
-                    min=0, max=1, step=1, value=1,
-                    marks={0: {'label': 'Disengage (0)'}, 1: {'label': 'Engage (1)'}},
-                    updatemode='mouseup',
-                    tooltip={'always_visible': False, 'placement': 'bottom'}
-                ),
-            ], style=LIGHT_THEME['slider_style'], id='servo-control'),
+                dcc.Graph(id="neutron-graph", figure=create_empty_figure("Live Neutron Density", "Neutron Density")),
+            ], style=LIGHT_THEME['card_style'], id='neutron-card'),
+        ], className='row', id='second-row'),
 
+        # Third row: Reactivity graph
+        html.Div([
+            html.H6("Reactivity", style=LIGHT_THEME['section_title_style'], id='reactivity-title'),
             html.Div([
-                html.Label("Source Control:", id='source-label'),
-                dcc.Slider(
-                    id='source-set',
-                    min=0, max=1, step=1, value=0,
-                    marks={0: {'label': 'Off (0)'}, 1: {'label': 'On (1)'}},
-                    updatemode='mouseup',
-                    tooltip={'always_visible': False, 'placement': 'bottom'}
-                ),
-            ], style=LIGHT_THEME['slider_style'], id='source-control'),
+                dcc.Graph(id="reactivity-graph", figure=create_empty_figure("Reactivity", "Reactivity (ρ)")),
+            ], style=LIGHT_THEME['card_style'], id='reactivity-card'),
+        ], className='row', id='third-row'),
 
-            html.Div(id='send-status', style={'minHeight': '24px', 'marginTop': '10px'}),
-        ], className='six columns', style={'paddingLeft': '10px', **LIGHT_THEME['card_style']}, id='controls-card'),
-    ], className='row', id='first-row', style={'marginBottom': '20px'}),
-
-    # Second row: Neutron density graph
-    html.Div([
-        html.H2("Live Neutron Density", style=LIGHT_THEME['section_title_style'], id='neutron-title'),
+        # Fourth row: Control Rod Position graph
         html.Div([
-            dcc.Graph(id="neutron-graph", figure=create_empty_figure("Live Neutron Density", "Neutron Density")),
-        ], style=LIGHT_THEME['card_style'], id='neutron-card'),
-    ], className='row', id='second-row'),
+            html.H6("Control Rod Position", style=LIGHT_THEME['section_title_style'], id='position-title'),
+            html.Div([
+                dcc.Graph(id="position-graph", figure=create_empty_figure("Control Rod Position", "Position (cm)")),
+            ], style=LIGHT_THEME['card_style'], id='position-card'),
+        ], className='row', id='fourth-row'),
 
-    # Third row: Reactivity graph
-    html.Div([
-        html.H2("Reactivity", style=LIGHT_THEME['section_title_style'], id='reactivity-title'),
-        html.Div([
-            dcc.Graph(id="reactivity-graph", figure=create_empty_figure("Reactivity", "Reactivity (ρ)")),
-        ], style=LIGHT_THEME['card_style'], id='reactivity-card'),
-    ], className='row', id='third-row'),
-
-    # Fourth row: Control Rod Position graph
-    html.Div([
-        html.H2("Control Rod Position", style=LIGHT_THEME['section_title_style'], id='position-title'),
-        html.Div([
-            dcc.Graph(id="position-graph", figure=create_empty_figure("Control Rod Position", "Position (cm)")),
-        ], style=LIGHT_THEME['card_style'], id='position-card'),
-    ], className='row', id='fourth-row'),
+    ], style={'maxWidth': '1600px', 'margin': 'auto'}),
 
     # Hidden div for storing intermediate state
     html.Div(id='app-state', style={'display': 'none'}),
 
     # Update interval
-    dcc.Interval(id="interval", interval=500, n_intervals=0),
+    dcc.Interval(id="interval", interval=1000, n_intervals=0),
 
 ], style={'padding': '20px', 'fontFamily': 'Arial', 'backgroundColor': LIGHT_THEME['background_color'], 'color': LIGHT_THEME['text_color']}, id='main-container')
 
@@ -395,7 +403,6 @@ def toggle_theme(n_clicks, theme_data):
             'background-color': '#333',
             'color': 'white',
             'border': 'none',
-            'padding': '10px 16px',
             'borderRadius': '6px',
             'cursor': 'pointer'
         }, {
@@ -417,7 +424,6 @@ def toggle_theme(n_clicks, theme_data):
             'background-color': '#f8f9fa',
             'color': '#333',
             'border': 'none',
-            'padding': '10px 16px',
             'borderRadius': '6px',
             'cursor': 'pointer'
         }
@@ -434,7 +440,6 @@ def toggle_theme(n_clicks, theme_data):
             'background-color': '#333',
             'color': 'white',
             'border': 'none',
-            'padding': '10px 16px',
             'borderRadius': '6px',
             'cursor': 'pointer'
         }
@@ -508,7 +513,7 @@ def update_app_state(n_intervals, reset_clicks):
     # Process data from queue
     new_data_count = 0
 
-    while not stream_data_q.empty() and new_data_count < 10:
+    while not stream_data_q.empty() and new_data_count < 100:  # Allow more data processing per callback
         try:
             # Get data point from queue (now includes dt)
             density, rho, position, dt = stream_data_q.get_nowait()
@@ -519,13 +524,6 @@ def update_app_state(n_intervals, reset_clicks):
             rho_values.append(rho * 1e5)  # reactivity in PCM
             position_values.append(position)
 
-            # Enforce maximum history length
-            if len(time_points) > max_history:
-                time_points = time_points[-max_history:]
-                neutron_values = neutron_values[-max_history:]
-                rho_values = rho_values[-max_history:]
-                position_values = position_values[-max_history:]
-
             stream_data_q.task_done()
             new_data_count += 1
 
@@ -534,6 +532,13 @@ def update_app_state(n_intervals, reset_clicks):
         except Exception as e:
             logger.error(f"Error processing data point: {e}")
             break  # Stop processing on error
+
+    # Enforce maximum history length outside the loop
+    if len(time_points) > max_history:
+        time_points = time_points[-max_history:]
+        neutron_values = neutron_values[-max_history:]
+        rho_values = rho_values[-max_history:]
+        position_values = position_values[-max_history:]
 
     # Return the current state serialized as JSON (meta only)
     try:
@@ -576,22 +581,31 @@ def update_plots(app_state_json, theme_data):
 
         # Add data if available
         if time_points:
-            # Trend lines
-            n_trend = moving_average(neutron_values, window=20)
-            p_trend = moving_average(position_values, window=20)
-            r_trend = moving_average(rho_values, window=20)
+            # Downsample data for plotting
+            data_len = len(time_points)
+            step = max(1, data_len // max_plot_points)
+
+            t_points_plot = time_points[::step]
+            n_values_plot = neutron_values[::step]
+            p_values_plot = position_values[::step]
+            r_values_plot = rho_values[::step]
+
+            # Trend lines on downsampled data
+            n_trend = moving_average(n_values_plot, window=20)
+            p_trend = moving_average(p_values_plot, window=20)
+            r_trend = moving_average(r_values_plot, window=20)
 
             # Neutron
             neutron_fig['data'] = [
                 go.Scatter(
-                    x=time_points,
-                    y=neutron_values,
+                    x=t_points_plot,
+                    y=n_values_plot,
                     mode='markers',
                     name='Neutron Density (points)',
                     marker={'color': 'rgba(33, 150, 243, 0.9)', 'size': 5},
                 ),
                 go.Scatter(
-                    x=time_points,
+                    x=t_points_plot,
                     y=n_trend,
                     mode='lines',
                     name='Trend',
@@ -603,14 +617,14 @@ def update_plots(app_state_json, theme_data):
             # Position
             position_fig['data'] = [
                 go.Scatter(
-                    x=time_points,
-                    y=position_values,
+                    x=t_points_plot,
+                    y=p_values_plot,
                     mode='markers',
                     name='Rod Position (points)',
                     marker={'color': 'rgba(76, 175, 80, 0.9)', 'size': 5},
                 ),
                 go.Scatter(
-                    x=time_points,
+                    x=t_points_plot,
                     y=p_trend,
                     mode='lines',
                     name='Trend',
@@ -622,14 +636,14 @@ def update_plots(app_state_json, theme_data):
             # Reactivity
             reactivity_fig['data'] = [
                 go.Scatter(
-                    x=time_points,
-                    y=rho_values,
+                    x=t_points_plot,
+                    y=r_values_plot,
                     mode='markers',
                     name='Reactivity (points)',
                     marker={'color': 'rgba(244, 67, 54, 0.9)', 'size': 5},
                 ),
                 go.Scatter(
-                    x=time_points,
+                    x=t_points_plot,
                     y=r_trend,
                     mode='lines',
                     name='Trend',
