@@ -115,7 +115,6 @@ DARK_THEME = {
     }
 }
 
-# --- Helpers ---
 
 def is_value_reasonable(name, value):
     """Check if a value is within reasonable bounds"""
@@ -515,7 +514,7 @@ def update_app_state(n_intervals, reset_clicks):
             # Add timestamp and data to our lists
             time_points.append(dt)
             neutron_values.append(density)
-            rho_values.append(rho)
+            rho_values.append(rho * 1e5)  # reactivity in PCM
             position_values.append(position)
 
             # Enforce maximum history length
@@ -570,8 +569,8 @@ def update_plots(app_state_json, theme_data):
 
         # Create default empty figures with appropriate theme
         neutron_fig = create_empty_figure("Live Neutron Density", "Neutron Density", theme)
-        position_fig = create_empty_figure("Control Rod Position", "Position (cm)", theme)
-        reactivity_fig = create_empty_figure("Reactivity", "Reactivity (ρ)", theme)
+        position_fig = create_empty_figure("Control Rod Position [cm]", "Position [cm]", theme)
+        reactivity_fig = create_empty_figure("Reactivity [pcm]", "Reactivity [pcm]", theme)
 
         # Add data if available
         if time_points:
