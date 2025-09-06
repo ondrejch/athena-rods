@@ -222,8 +222,8 @@ def forward_ctrl(src_key, dst_key):
                     dst_sock.sendall(line + b'\n')
 
                 except json.JSONDecodeError as e:
-                    logger.warning(
-                        f"Invalid JSON from {src_key}: {e}, data: {line[:100]}...")  # Skip this line, don't forward invalid JSON
+                    logger.warning(f"Invalid JSON from {src_key}: {e}, data: {line[:100]}...")
+                    # Skip this line, don't forward invalid JSON
 
         except (ConnectionResetError, BrokenPipeError, socket.timeout) as e:
             logger.info(f"Control {src_key} to {dst_key} error: {e}")
@@ -246,7 +246,6 @@ def forward_ctrl(src_key, dst_key):
         except Exception as e:
             logger.error(f"Unexpected error in forward_ctrl between {src_key} and {dst_key}: {e}")
             time.sleep(1)
-
 
 def run_leds():
     """Thread that manages state of LEDs"""

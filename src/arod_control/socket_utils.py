@@ -9,7 +9,7 @@ import logging
 import threading
 import json
 import struct
-from typing import Tuple, Optional, Dict, Any, Callable
+from typing import Tuple, Optional, Dict, Any
 
 logger = logging.getLogger('SocketUtils')
 
@@ -60,6 +60,12 @@ class SocketManager:
             except Exception as e:
                 logger.error(f"Connection failed to {self.host}:{self.port}: {e}")
                 self.connected = False
+                if self.socket:
+                    try:
+                        self.socket.close()
+                    except:
+                        pass
+                    self.socket = None
                 return False
 
     def close(self):
@@ -113,7 +119,7 @@ class SocketManager:
         """
         with self.lock:
             if not self.connected:
-                if not self.connect_with_backoff():
+                if not self.connect_with_backoff(max_attempts=1):
                     return False
 
             try:
@@ -151,7 +157,7 @@ class SocketManager:
         """
         with self.lock:
             if not self.connected:
-                if not self.connect_with_backoff():
+                if not self.connect_with_backoff(max_attempts=1):
                     return b"", False
 
             try:
@@ -180,16 +186,17 @@ class SocketManager:
         end_time = time.time() + timeout
 
         while len(result) < size and time.time() < end_time:
-            with self.lock:
-                if not self.connected:
-                    if not self.connect_with_backoff(max_attempts=1):
-                        return b"", False
-
-            chunk, success = self.receive(size - len(result))
+            remaining = size - len(result)
+            chunk, success = self.receive(remaining)
             if not success:
                 return b"", False
 
             result += chunk
+            if len(result) == size:
+                return result, True
+
+            # Small delay to avoid tight loop
+            time.sleep(0.01)
 
         return result, len(result) == size
 
@@ -214,6 +221,7 @@ class SocketManager:
                 return result, True
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid JSON received: {e}")
+                # Don't reset connection for JSON decode errors
                 return {}, False
             except Exception as e:
                 logger.error(f"Error receiving JSON data: {e}")

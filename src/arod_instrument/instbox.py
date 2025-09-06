@@ -301,13 +301,17 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
+        stop_event.set()
         logger.info("Shutting down on keyboard interrupt...")
     except Exception as e:
+        stop_event.set()
         logger.error(f"Unhandled exception in main: {e}")
     finally:
         # Clean shutdown
         logger.info("Closing sockets and cleaning up...")
         stop_event.set()
+        global power_calculator
+        power_calculator.stop()
         stream_socket.close()
         ctrl_socket.close()
         logger.info("Shutdown complete.")
