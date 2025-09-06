@@ -35,13 +35,13 @@ time_points: List[datetime.datetime] = []
 neutron_values: List[float] = []
 rho_values: List[float] = []
 position_values: List[float] = []
-max_history = 5000  # Maximum number of points to store
+max_history: int = 5000  # Maximum number of points to store
 
-# Value bounds for validation
+# Value bounds for sanity validation
 VALUE_BOUNDS = {
-    "neutron": (-1.0, 1e38),    # Expected neutron density range
+    "neutron": (-1.0, 1e32),    # Expected neutron density range
     "rho": (-1.0, 1.0),         # Expected reactivity range
-    "position": (0.0, 60.0)     # Expected position range in cm
+    "position": (0.0, 30.0)     # Expected position range in cm
 }
 
 # Store global application state
