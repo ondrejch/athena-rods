@@ -236,6 +236,7 @@ def ctrl_receiver():
 def stream_sender(cr_reactivity, update_event):
     """Send stream data to control box"""
     global power_calculator
+    counter: int = 0
     while not stop_event.is_set():
         try:
             # Wait for signal that new data is available
@@ -246,6 +247,9 @@ def stream_sender(cr_reactivity, update_event):
                 neutron_density = power_calculator.current_neutron_density
                 rho = power_calculator.current_rho
                 distance = cr_reactivity.distance
+                if counter % 10 == 0:
+                    logger.info(f"CR pos: {distance:4.1f} cm, rho: {rho:.5f}, N: {neutron_density:.2e}")
+                counter += 1
 
                 # Pack and send the data
                 data = StreamingPacket.pack_float_triplet(neutron_density, rho, distance)

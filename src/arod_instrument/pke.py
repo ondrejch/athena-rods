@@ -35,7 +35,7 @@ class ReactorPowerCalculator(threading.Thread):
         self.current_neutron_density = 1.0
         self.current_rho = 0.0
         self.update_event = update_event  # New event for signaling updates
-        self.DEBUG = 3
+        self.DEBUG = 0
 
     def run(self):
         """Execute a time-dependent simulation of neutron density in nuclear reactor kinetics.
