@@ -91,14 +91,14 @@ def process_ctrl_status():
                     logger.info(f"Received settings: motor={motor_set}, servo={servo_set}, source={source_set}")
 
                     if motor_set == 1:
-                        if limit_switch.is_pressed():
+                        if limit_switch.is_pressed:
                             rod_lift()
                         if get_distance() < MAX_ROD_DISTANCE:
                             motor.up()
                         else:
                             motor.stop()
                     elif motor_set == -1:
-                        if not limit_switch.is_pressed():
+                        if not limit_switch.is_pressed:
                             motor.down()
                     else:
                         motor.stop()
