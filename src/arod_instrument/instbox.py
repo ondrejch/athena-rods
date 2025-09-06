@@ -95,6 +95,8 @@ def process_ctrl_status():
                             rod_lift()
                         if get_distance() < MAX_ROD_DISTANCE:
                             motor.up()
+                        else:
+                            motor.stop()
                     elif motor_set == -1:
                         motor.down()
                     else:
