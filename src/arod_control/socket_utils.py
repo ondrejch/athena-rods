@@ -307,12 +307,13 @@ class SocketManager:
                 self.connected = False
                 return {}, False
 
-    class StreamingPacket:
-        # unchanged
-        @staticmethod
-        def pack_float_triplet(val1: float, val2: float, val3: float) -> bytes:
-            return struct.pack('!fff', val1, val2, val3)
 
-        @staticmethod
-        def unpack_float_triplet(data: bytes) -> Tuple[float, float, float]:
-            return struct.unpack('!fff', data)
+class StreamingPacket:
+    # unchanged
+    @staticmethod
+    def pack_float_triplet(val1: float, val2: float, val3: float) -> bytes:
+        return struct.pack('!fff', val1, val2, val3)
+
+    @staticmethod
+    def unpack_float_triplet(data: bytes) -> Tuple[float, float, float]:
+        return struct.unpack('!fff', data)
