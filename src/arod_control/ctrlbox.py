@@ -12,35 +12,30 @@ import json
 from arod_control.leds import LEDs
 from arod_control.display import Display
 from arod_control.authorization import RFID_Authorization, FaceAuthorization
-from arod_control import PORT_CTRL, PORT_STREAM     # Socket settings
+from arod_control import PORT_CTRL, PORT_STREAM  # Socket settings
+from socket_utils import StreamingPacket
 
-FAKE_FACE_AUTH: bool = True  # FAKE face authorization, use for developemnt only!!
-CB_STATE: dict = {  # Control box machine state
-    'auth': {       # Authorization status
-        'face': '',
-        'rfid': '',
-        'disp': False   # Is display computer alllowed to connect?
-    },
-    'refresh': {    # Refresh rate for loops [s]
-        'leds':  1,     # LED
-        'display': 1,   # LCD
-        'rfid': 15*60,  # RFID authorization
-        'as_1': 0.1     #
-    },
-    'leds': [9, 9, 9],  # 0 - off, 1 - on, 9 - flashing
-    'message': {
-        'text': '',     # Text to show
-        'timer': 2      # for how long [s]
-    },
-    'as_1': {     # Synchronized machine state with actuator/sensor box1
-        'distance': -1.0,   # Ultrasound distance measurement [float]
-        'motor': 0,         # AROD motor down, stop, up [-1, 0, 1]
-        'servo': 0,         # Servo engaging [0, 1]
-        'bswitch': 0        # Bottom switch pressed [0, 1]
-    }
-}
-
+# Configuration
+FAKE_FACE_AUTH: bool = True  # FAKE face authorization, use for development only!!
 APPROVED_USER_NAMES: list[str] = ['Ondrej Chvala']
+
+# Control box machine state
+CB_STATE: dict = {'auth': {  # Authorization status
+    'face': '', 'rfid': '', 'disp': False  # Is display computer allowed to connect?
+}, 'refresh': {  # Refresh rate for loops [s]
+    'leds': 1,  # LED
+    'display': 1,  # LCD
+    'rfid': 15 * 60,  # RFID authorization
+    'as_1': 0.1  #
+}, 'leds': [9, 9, 9],  # 0 - off, 1 - on, 9 - flashing
+    'message': {'text': '',  # Text to show
+        'timer': 2  # for how long [s]
+    }, 'as_1': {  # Synchronized machine state with actuator/sensor box1
+        'distance': -1.0,  # Ultrasound distance measurement [float]
+        'motor': 0,  # AROD motor down, stop, up [-1, 0, 1]
+        'servo': 0,  # Servo engaging [0, 1]
+        'bswitch': 0  # Bottom switch pressed [0, 1]
+    }}
 
 # LOGGER
 logger = logging.getLogger('ACBox')  # ATHENA rods Control Box
@@ -56,7 +51,6 @@ file_handler.setFormatter(formatter)
 
 # Console handler logs INFO and above
 console_handler = logging.StreamHandler()
-#console_handler.setLevel(logging.INFO)
 console_handler.setLevel(logging.DEBUG)
 console_handler.setFormatter(formatter)
 
@@ -65,194 +59,203 @@ logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
 # SOCKET communications setup
-connections = {
-    "stream_instr": None,
-    "stream_display": None,
-    "ctrl_instr": None,
-    "ctrl_display": None,
-}
-lock = threading.Lock()
-server_stream: (socket.socket, None) = None
-server_ctrl: (socket.socket, None) = None
+connections = {"stream_instr": None, "stream_display": None, "ctrl_instr": None, "ctrl_display": None, }
+connection_lock = threading.Lock()
+servers = {"stream": None, "ctrl": None}
 
 
-def accept_connections(server, role, conn_key):
-    """ Socket communication: accepting client connections """
+def accept_connections(server_socket, role, conn_key):
+    """Socket communication: accepting client connections with improved error handling"""
     while True:
-        time.sleep(0.5)
         try:
-            conn, addr = server.accept()
+            conn, addr = server_socket.accept()
+            conn.settimeout(10.0)  # Set timeout for socket operations
             logger.info(f"Incoming connection for {role} from {addr}")
+
+            # Set a timeout for receiving handshake
+            conn.settimeout(5.0)
+            handshake_data = conn.recv(32)
+            if not handshake_data:
+                logger.warning(f"Empty handshake from {addr}, closing connection")
+                conn.close()
+                continue
+
+            handshake = handshake_data.decode('utf-8').strip()
+
+            # Authorization check for display clients only
+            if role.startswith("stream_display") or role.startswith("ctrl_display"):
+                if not CB_STATE['auth']['disp']:
+                    logger.info(f"Rejected {role} connection from {addr} due to AUTH=False")
+                    conn.sendall(b'REJECT:UNAUTHORIZED\n')
+                    conn.close()
+                    continue
+
+            if handshake != role:
+                logger.warning(f"Invalid handshake '{handshake}' from {addr}, expected '{role}'")
+                conn.close()
+                continue
+
+            # Connection accepted, update connection dict with lock
+            with connection_lock:
+                old_conn = connections.get(conn_key)
+                if old_conn is not None:
+                    try:
+                        old_conn.shutdown(socket.SHUT_RDWR)
+                        old_conn.close()
+                    except Exception as e:
+                        logger.warning(f"Error closing old connection: {e}")
+
+                connections[conn_key] = conn
+                logger.info(f"Socket connection: {role} connected from {addr}")
+
         except OSError as e:
-            if e.errno == 9:  # Bad file descriptor, socket likely closed, exit cleanly
+            if e.errno == 9:  # Bad file descriptor, socket likely closed
                 logger.info(f"Accept thread for {role} exiting due to socket close")
                 break
             else:
-                logger.warning(f"Unexpected OSError in accept_connections: {e}")
+                logger.warning(f"OSError in accept_connections: {e}")
+                time.sleep(1)
+
+        except Exception as e:
+            logger.error(f"Unexpected error in accept_connections: {e}")
             time.sleep(1)
-            continue
-        try:
-            handshake = conn.recv(32).decode('utf-8').strip()
-        except Exception:
-            conn.close()
-            continue
-        # Authorization check for display clients only
-        if role.startswith("stream_display") or role.startswith("ctrl_display"):
-            if not CB_STATE['auth']['disp']:
-                logger.info(f"Rejected {role} connection from {addr} due to AUTH=False")
-                conn.sendall(b'REJECT:UNAUTHORIZED\n')
-                conn.close()
-                continue
-        if handshake != role:
-            conn.close()
-            continue
-        with lock:
-            old_conn = connections.get(conn_key)  # Close previous connection if exists before replacing
-            if old_conn is not None:
-                try:
-                    old_conn.shutdown(socket.SHUT_RDWR)
-                    old_conn.close()
-                except Exception:
-                    pass
-            connections[conn_key] = conn
-            logger.info(f"Socket connection: {role} connected from {addr}")
 
-
-
-# # def forward_stream(src_key, dst_key):
-# #     """ Socket communication: forwarding stream from Instrumentation to Display computers """
-# #     while True:
-# #         with lock:
-# #             src_sock = connections.get(src_key)
-# #             dst_sock = connections.get(dst_key)
-# #         if not src_sock or not dst_sock:
-# #             time.sleep(0.1)
-# #             continue
-# #         try:
-# #             data = src_sock.recv(12)  # 3 floats: neutron_density, reactivity, and distance
-# #             if not data:               # Connection closed gracefully, retry after short delay
-# #                 logger.info(f"Connection closed for {src_key}, attempting to reconnect...")
-# #                 with lock:
-# #                     connections[src_key] = None
-# #                     connections[dst_key] = None
-# #                 time.sleep(2)
-# #                 continue  # retry loop
-# #             dst_sock.sendall(data)
-# #         except (ConnectionResetError, BrokenPipeError) as e:
-# #             logger.info(f"Stream {src_key} to {dst_key} error: {e}. Retrying connection...")
-# #             with lock:
-# #                 connections[src_key] = None
-# #                 connections[dst_key] = None
-# #             # Implement reconnect logic here or rely on accept_connections to update sockets
-# #             time.sleep(2)  # wait before retrying
-# #             continue  # retry loop
-# #         except Exception as e:
-# #             logger.info(f"Unexpected error in forward_stream between {src_key} and {dst_key}: {e}. Retrying...")
-# #             time.sleep(2)
-# #             continue
-# #
-# # # def forward_stream(src_key, dst_key):
-# # #     """ Socket communication: forwarding stream from Instrumentation to Display computers """
-# # #     while True:
-# # #         with lock:
-# # #             src_sock = connections.get(src_key)
-# # #             dst_sock = connections.get(dst_key)
-# # #         if not src_sock or not dst_sock:
-# # #             continue
-# # #         try:
-# # #             data = src_sock.recv(12)  # 3 floats: neutron_density, reactivity, and distance
-# # #             if not data:
-# # #                 break
-# # #             dst_sock.sendall(data)
-# # #         except Exception as e:
-# # #             logger.info(f"Stream {src_key} to {dst_key} error: {e}")
-# # #             break
 
 def forward_stream(src_key, dst_key):
+    """
+    Socket communication: forwarding stream data between connections
+    with robust error handling and reconnection logic
+    """
     while True:
-        with lock:
+        # Get current connections under lock
+        with connection_lock:
             src_sock = connections.get(src_key)
             dst_sock = connections.get(dst_key)
+
+        # Skip if either connection is missing
         if not src_sock or not dst_sock:
             time.sleep(0.1)
             continue
+
         try:
-            data = src_sock.recv(12)
-            if not data:
-                logger.info(f"Connection closed from {src_key}, cleaning connection and retrying...")
-                with lock:
-                    connections[src_key] = None
-                time.sleep(2)
-                continue
+            # Set a reasonable timeout
+            src_sock.settimeout(1.0)
+
+            # Try to receive exactly 12 bytes (3 float values)
+            data = b""
+            bytes_received = 0
+
+            while bytes_received < 12:
+                chunk = src_sock.recv(12 - bytes_received)
+                if not chunk:  # Connection closed
+                    raise ConnectionResetError(f"Connection closed from {src_key}")
+
+                data += chunk
+                bytes_received = len(data)
+
+            # Forward the complete data packet
             dst_sock.sendall(data)
-        except (ConnectionResetError, BrokenPipeError, OSError) as e:
-            logger.info(f"Stream {src_key} to {dst_key} error: {e}. Cleaning connection and retrying...")
-            with lock:
-                connections[src_key] = None
-            time.sleep(2)
-            continue
+
+        except (ConnectionResetError, BrokenPipeError, socket.timeout) as e:
+            logger.info(f"Stream {src_key} to {dst_key} error: {e}")
+
+            # Clean up the affected connection(s)
+            with connection_lock:
+                if src_key in connections and connections[src_key] == src_sock:
+                    try:
+                        connections[src_key].close()
+                    except Exception:
+                        pass
+                    connections[src_key] = None
+
+            # Short delay before retry
+            time.sleep(0.5)
+
         except Exception as e:
-            logger.info(f"Unexpected error in forwarding stream {src_key} to {dst_key}: {e}. Retrying...")
-            time.sleep(2)
-            continue
+            logger.error(f"Unexpected error in forward_stream between {src_key} and {dst_key}: {e}")
+            time.sleep(1)
 
 
 def forward_ctrl(src_key, dst_key):
     """
-    Socket communication: Forwarding JSON-formatted messages between control sockets.
-    Handles disconnects, JSON parse errors, and cleans up only the affected connection.
+    Socket communication: Forwarding JSON-formatted messages between control sockets
+    with improved buffer management and error handling
     """
     buffer = b""
     while True:
-        with lock:
+        # Get current connections under lock
+        with connection_lock:
             src_sock = connections.get(src_key)
             dst_sock = connections.get(dst_key)
+
+        # Skip if either connection is missing
         if not src_sock or not dst_sock:
             time.sleep(0.1)
             continue
-        try:
-            msg = src_sock.recv(1024)
-            if not msg:
-                logger.info(f"Connection closed from {src_key}, cleaning connection and retrying...")
-                with lock:
-                    connections[src_key] = None
-                time.sleep(2)
-                continue
 
-            buffer += msg
+        try:
+            # Set a reasonable timeout
+            src_sock.settimeout(1.0)
+
+            # Receive data
+            chunk = src_sock.recv(1024)
+            if not chunk:  # Connection closed
+                raise ConnectionResetError(f"Connection closed from {src_key}")
+
+            buffer += chunk
+
+            # Process complete messages
             while b'\n' in buffer:
                 line, buffer = buffer.split(b'\n', 1)
-                try:
-                    # Validate JSON before forwarding
-                    json.loads(line.decode('utf-8'))
-                    dst_sock.sendall(line + b'\n')
-                except json.JSONDecodeError:
-                    logger.info(f"Invalid JSON received on {src_key}: {line}")
-                    # skip bad json line
+
+                # Skip empty lines
+                if not line.strip():
                     continue
 
-        except (ConnectionResetError, BrokenPipeError) as e:
-            logger.info(f"Control {src_key} to {dst_key} error: {e}. Cleaning connection and retrying...")
-            with lock:
-                connections[src_key] = None
-            time.sleep(2)
-            continue
+                try:
+                    # Validate JSON before forwarding
+                    message = json.loads(line.decode('utf-8'))
+
+                    # Optional: Add message validation here
+
+                    # Forward to destination
+                    dst_sock.sendall(line + b'\n')
+
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        f"Invalid JSON from {src_key}: {e}, data: {line[:100]}...")  # Skip this line, don't forward invalid JSON
+
+        except (ConnectionResetError, BrokenPipeError, socket.timeout) as e:
+            logger.info(f"Control {src_key} to {dst_key} error: {e}")
+
+            # Clean up the affected connection
+            with connection_lock:
+                if src_key in connections and connections[src_key] == src_sock:
+                    try:
+                        connections[src_key].close()
+                    except Exception:
+                        pass
+                    connections[src_key] = None
+
+            # Reset buffer for new connection
+            buffer = b""
+
+            # Short delay before retry
+            time.sleep(0.5)
 
         except Exception as e:
-            logger.info(f"Unexpected error in forwarding control message {src_key} to {dst_key}: {e}. Retrying...")
-            time.sleep(2)
-            continue
+            logger.error(f"Unexpected error in forward_ctrl between {src_key} and {dst_key}: {e}")
+            time.sleep(1)
 
 
 def run_leds():
-    """ Thread that manages state of LEDs """
+    """Thread that manages state of LEDs"""
     leds = LEDs()
     logger.info('LEDs thread initialized')
     while True:
         time.sleep(CB_STATE['refresh']['leds'])
         for i, led_set in enumerate(CB_STATE['leds']):
-            # print(i, led_set)
-            if led_set == 1:    # The LEDs are flipped polarity
+            if led_set == 1:  # The LEDs are flipped polarity
                 leds.turn_off(i_led=i)
             elif led_set == 0:
                 leds.turn_on(i_led=i)
@@ -264,7 +267,7 @@ def run_leds():
 
 
 def run_display():
-    """ Thread that manages the LCD display """
+    """Thread that manages the LCD display"""
     display = Display()
     logger.info('LCD display thread initialized')
     while True:
@@ -272,7 +275,7 @@ def run_display():
         time.sleep(CB_STATE['refresh']['display'])
         if message:
             display.show_message(message)
-            message = message.replace("\n"," \\\\ ")
+            message = message.replace("\n", " \\\\ ")
             logger.info(f"LCD display: show message {message} for {CB_STATE['message']['timer']} sec")
             CB_STATE['message']['text'] = ''
             time.sleep(CB_STATE['message']['timer'] - CB_STATE['refresh']['display'])
@@ -281,30 +284,30 @@ def run_display():
 
 
 def run_auth():
-    """ Thread that manages authorization """
+    """Thread that manages authorization"""
     rfid_auth = RFID_Authorization()
     face_auth = FaceAuthorization()
     logger.info('Authorization thread initialized')
     while True:
         if not FAKE_FACE_AUTH:
-            while not CB_STATE['auth']['face']:     # 1. Wait for face authorization
+            while not CB_STATE['auth']['face']:  # 1. Wait for face authorization
                 detected_name = face_auth.scan_face()
                 if detected_name in APPROVED_USER_NAMES:
                     CB_STATE['auth']['face'] = detected_name
                     logger.info(f'Authorization: authorized user {detected_name} by face')
                 else:
                     time.sleep(2)
-            else:
-                detected_name = APPROVED_USER_NAMES[0]
-                CB_STATE['auth']['face'] = detected_name
-                logger.info(f'FAKE Authorization: authorized user {detected_name} by face')
+        else:
+            detected_name = APPROVED_USER_NAMES[0]
+            CB_STATE['auth']['face'] = detected_name
+            logger.info(f'FAKE Authorization: authorized user {detected_name} by face')
 
         CB_STATE['message']['text'] = f"Authorized user\n{CB_STATE['auth']['face']}"
         CB_STATE['message']['timer'] = 5
         CB_STATE['leds'][1] = 0
 
         logger.info(f"RFID: {CB_STATE['auth']['rfid']}")
-        while not CB_STATE['auth']['rfid']:     # 2. Wait for RFID authorization
+        while not CB_STATE['auth']['rfid']:  # 2. Wait for RFID authorization
             (tag_id, tag_t) = rfid_auth.read_tag()
             logger.debug(f"tag_id, tag_t: {tag_id}, {tag_t}")
             if rfid_auth.auth_tag():
@@ -314,14 +317,15 @@ def run_auth():
                 logger.info('Authorization: RFID failed')
                 time.sleep(2)
 
-        logger.info(f"Authorization: RFID {CB_STATE['auth']['rfid']} token authorized, OK for {CB_STATE['refresh']['rfid']//60} minutes!")
-        CB_STATE['message']['text'] = f"RFID authorized\nOK for {CB_STATE['refresh']['rfid']//60} mins!"
+        logger.info(
+            f"Authorization: RFID {CB_STATE['auth']['rfid']} token authorized, OK for {CB_STATE['refresh']['rfid'] // 60} minutes!")
+        CB_STATE['message']['text'] = f"RFID authorized\nOK for {CB_STATE['refresh']['rfid'] // 60} mins!"
         CB_STATE['message']['timer'] = 5
         CB_STATE['leds'][1] = 1
         CB_STATE['auth']['disp'] = True
 
-        time.sleep(CB_STATE['refresh']['rfid']) # 3. Auth re-checking
-        attempts = 5                            # RFID re-authenticate trials
+        time.sleep(CB_STATE['refresh']['rfid'])  # 3. Auth re-checking
+        attempts = 5  # RFID re-authenticate trials
 
         CB_STATE['leds'][1] = 0
         for i in range(attempts):
@@ -331,69 +335,103 @@ def run_auth():
                 break
             time.sleep(2)
 
-        if CB_STATE['leds'][1] == 0:            # Reset authorization requirement
+        if CB_STATE['leds'][1] == 0:  # Reset authorization requirement
             CB_STATE['leds'][1] = 9
             CB_STATE['auth']['face'] = ''
             CB_STATE['auth']['disp'] = False
             logger.info("Authorization: RFID re-authorization failed, resetting to unauthorized!")
 
 
-def main_loop():
-    global server_stream, server_ctrl
+def setup_socket_servers():
+    """Initialize and configure socket servers with proper error handling"""
+    try:
+        # Stream socket server
+        stream_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        stream_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        stream_server.bind(('0.0.0.0', PORT_STREAM))
+        stream_server.listen(10)  # Increased from 5 to handle more pending connections
+        servers["stream"] = stream_server
+        logger.info(f"Stream server listening on port {PORT_STREAM}")
 
+        # Control socket server
+        ctrl_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        ctrl_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        ctrl_server.bind(('0.0.0.0', PORT_CTRL))
+        ctrl_server.listen(10)
+        servers["ctrl"] = ctrl_server
+        logger.info(f"Control server listening on port {PORT_CTRL}")
+
+        return True
+
+    except OSError as e:
+        if e.errno == 98:  # Address already in use
+            logger.error(f"Socket port already in use: {e}")
+        else:
+            logger.error(f"Socket server setup error: {e}")
+        return False
+
+    except Exception as e:
+        logger.error(f"Unexpected error setting up socket servers: {e}")
+        return False
+
+
+def main_loop():
+    """Main program loop that starts all threads and manages socket servers"""
     # Start all threads
+    threads = []
 
     # LED driver
-    """Start multiple threads to handle LED, LCD, authorization, and socket communication processes.
-    Parameters:
-        None
-    Returns:
-        None"""
-    led_thread = threading.Thread(target=run_leds)
-    led_thread.daemon = True
+    led_thread = threading.Thread(target=run_leds, daemon=True)
     led_thread.start()
+    threads.append(led_thread)
 
     # LCD driver
-    display_thread = threading.Thread(target=run_display)
-    display_thread.daemon = True
+    display_thread = threading.Thread(target=run_display, daemon=True)
     display_thread.start()
+    threads.append(display_thread)
     time.sleep(2)
 
     # Authorization
-    auth_thread = threading.Thread(target=run_auth)
-    auth_thread.daemon = True
+    auth_thread = threading.Thread(target=run_auth, daemon=True)
     auth_thread.start()
+    threads.append(auth_thread)
 
-    # Stream sockets
-    HOST = '0.0.0.0'  # Localhost
-    server_stream = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_stream.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_stream.bind((HOST, PORT_STREAM))
-    server_stream.listen(5)
-    logger.info(f"Control computer listening for streaming on {PORT_STREAM}")
-
-    # Control sockets
-    server_ctrl = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_ctrl.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_ctrl.bind((HOST, PORT_CTRL))
-    server_ctrl.listen(5)
-    logger.info(f"Control computer listening for messages on {PORT_STREAM}")
+    # Setup socket servers
+    if not setup_socket_servers():
+        logger.error("Failed to setup socket servers, exiting")
+        return
 
     # Socket connection threads
-    threading.Thread(target=accept_connections, args=(server_stream, "stream_instr", "stream_instr"), daemon=True).start()
-    threading.Thread(target=accept_connections, args=(server_stream, "stream_display", "stream_display"), daemon=True).start()
-    threading.Thread(target=accept_connections, args=(server_ctrl, "ctrl_instr", "ctrl_instr"), daemon=True).start()
-    threading.Thread(target=accept_connections, args=(server_ctrl, "ctrl_display", "ctrl_display"), daemon=True).start()
+    socket_threads = [
+        threading.Thread(target=accept_connections, args=(servers["stream"], "stream_instr", "stream_instr"),
+                         daemon=True),
+        threading.Thread(target=accept_connections, args=(servers["stream"], "stream_display", "stream_display"),
+                         daemon=True),
+        threading.Thread(target=accept_connections, args=(servers["ctrl"], "ctrl_instr", "ctrl_instr"), daemon=True),
+        threading.Thread(target=accept_connections, args=(servers["ctrl"], "ctrl_display", "ctrl_display"),
+                         daemon=True)]
+
+    for t in socket_threads:
+        t.start()
+        threads.append(t)
 
     # Socket communication threads
-    threading.Thread(target=forward_stream, args=("stream_instr", "stream_display"), daemon=True).start()
-    threading.Thread(target=forward_stream, args=("stream_display", "stream_instr"), daemon=True).start()
-    threading.Thread(target=forward_ctrl, args=("ctrl_instr", "ctrl_display"), daemon=True).start()
-    threading.Thread(target=forward_ctrl, args=("ctrl_display", "ctrl_instr"), daemon=True).start()
+    comm_threads = [threading.Thread(target=forward_stream, args=("stream_instr", "stream_display"), daemon=True),
+        threading.Thread(target=forward_stream, args=("stream_display", "stream_instr"), daemon=True),
+        threading.Thread(target=forward_ctrl, args=("ctrl_instr", "ctrl_display"), daemon=True),
+        threading.Thread(target=forward_ctrl, args=("ctrl_display", "ctrl_instr"), daemon=True)]
 
-    while True:
-        time.sleep(5)
-        pass
+    for t in comm_threads:
+        t.start()
+        threads.append(t)
+
+    logger.info("All threads started, entering main loop")
+    try:
+        # Main thread just keeps the program alive
+        while True:
+            time.sleep(5)  # Optional: Health check could go here
+    except KeyboardInterrupt:
+        logger.info("Keyboard interrupt received, shutting down")
 
 
 if __name__ == "__main__":
@@ -402,10 +440,25 @@ if __name__ == "__main__":
         main_loop()
     except KeyboardInterrupt:
         logger.info("Ctrl+C detected, shutting down sockets and threads...")
-        try:
-            server_stream.close()
-            server_ctrl.close()
-        except Exception as e:
-            logger.warning(f"Error closing sockets: {e}")
-        # Optionally join threads here if they are not daemon
+    except Exception as e:
+        logger.error(f"Unhandled exception in main: {e}")
+    finally:
+        # Clean shutdown of socket servers
+        for server_name, server in servers.items():
+            if server:
+                try:
+                    server.close()
+                    logger.info(f"{server_name} server socket closed")
+                except Exception as e:
+                    logger.warning(f"Error closing {server_name} server socket: {e}")
+
+        # Clean shutdown of client connections
+        for conn_name, conn in connections.items():
+            if conn:
+                try:
+                    conn.close()
+                    logger.info(f"{conn_name} connection closed")
+                except Exception as e:
+                    logger.warning(f"Error closing {conn_name} connection: {e}")
+
         logger.info("Shutdown complete.")
