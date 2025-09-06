@@ -15,7 +15,7 @@ from pke import ReactorPowerCalculator
 from arod_control.socket_utils import SocketManager, StreamingPacket
 
 # External source for PKE
-SOURCE_STRENGTH: float = 1.0e-3  # Default external neutron source strength when enabled
+SOURCE_STRENGTH: float = 5.0  # Default external neutron source strength when enabled
 
 # Limit on rod extension, 20 cm
 MAX_ROD_DISTANCE: float = 20.0
