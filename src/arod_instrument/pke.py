@@ -92,6 +92,12 @@ class ReactorPowerCalculator(threading.Thread):
             # print("SOL: ", sol)
             state = sol[1].flatten()
             # print("STATE: ", state)
+            if state[0] > 1e30:
+                print(" *** POWER OVER 1e30, your reactor exploded! Resetting reactor kinetics. *** ")
+                n0 = 1.0
+                C0 = beta / (lambda_ * Lambda) * n0
+                state = np.concatenate(([n0], C0))
+
             neutron_density = state[0]
 
             current_time = time.time() - start_time
