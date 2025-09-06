@@ -8,3 +8,4 @@ dash
 numpy
 matplotlib
 SciPy
+plotly
