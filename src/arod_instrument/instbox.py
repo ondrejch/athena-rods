@@ -43,6 +43,9 @@ ctrl_socket = SocketManager(CONTROL_IP, PORT_CTRL, "ctrl_instr")
 ctrl_status_q = queue.Queue(maxsize=100)  # Limit size to prevent memory issues
 stop_event = threading.Event()
 
+# External source for PKE
+SOURCE_STRENGTH = 1.0e-3  # Default external neutron source strength when enabled
+
 
 def limit_switch_pressed():
     """Handler for when limit switch is pressed"""
@@ -84,9 +87,9 @@ def process_ctrl_status():
 
                     logger.info(f"Received settings: motor={motor_set}, servo={servo_set}, source={source_set}")
 
-                    # Add implementation for handling these settings
-                    # Example:
                     if motor_set == 1:
+                        if limit_switch_pressed():
+                            rod_lift()
                         motor.up()
                     elif motor_set == -1:
                         motor.down()
@@ -97,6 +100,16 @@ def process_ctrl_status():
                         rod_engage()
                     else:
                         rod_scram()
+
+                    if 'power_calculator' in globals():
+                        if source_set == 1:
+                            # Enable external neutron source
+                            power_calculator.set_source(SOURCE_STRENGTH)
+                            logger.info(f"External neutron source enabled with strength {SOURCE_STRENGTH}")
+                        else:
+                            # Disable external neutron source
+                            power_calculator.set_source(0.0)
+                            logger.info("External neutron source disabled")
 
             # Mark task as done
             ctrl_status_q.task_done()

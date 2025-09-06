@@ -29,9 +29,12 @@ class ReactorPowerCalculator(threading.Thread):
         self.duration = duration
         self.stop_event = threading.Event()
         self.results = []  # To store time, reactivity, power
-        # self.solver = None
         # Initialize solver with dummy reactivity function; will update each step
-        self.solver = PointKineticsEquationSolver(lambda t: 0.0)
+        self.source_strength = 0.0  # Added source strength parameter
+        self.solver = PointKineticsEquationSolver(
+            lambda t: 0.0,
+            source_func=lambda t: self.source_strength  # Use the class attribute for source
+        )
         self.current_neutron_density = 1.0
         self.current_rho = 0.0
         self.update_event = update_event  # New event for signaling updates
