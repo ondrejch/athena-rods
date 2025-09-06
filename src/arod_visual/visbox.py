@@ -104,15 +104,15 @@ def stream_receiver():
     counter = 0
     while True:
         try:
-            # Receive exactly 16 bytes (4 floats: neutron, rho, position, timestamp_ms)
-            data, success = stream_socket.receive_exactly(StreamingPacket.PACKET_SIZE_QUAD)
+            # Receive exactly 20 bytes (3 floats32 + 1 float64 timestamp_ms)
+            data, success = stream_socket.receive_exactly(StreamingPacket.PACKET_SIZE_TIME64)
             if not success:
                 logger.debug("No data received, waiting...")
                 time.sleep(0.5)
                 continue
 
             try:
-                neutron_density, rho, position, ts_ms = StreamingPacket.unpack_float_quad(data)
+                neutron_density, rho, position, ts_ms = StreamingPacket.unpack_triplet_plus_time64(data)
 
                 # Validate data before adding to queue
                 if not is_value_reasonable("neutron", neutron_density):

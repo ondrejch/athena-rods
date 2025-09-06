@@ -197,7 +197,7 @@ def forward_stream(src_key, dst_key):
     with robust error handling and reconnection logic
     """
     buffer = b""  # Buffer to accumulate partial messages
-    packet_size = StreamingPacket.PACKET_SIZE_QUAD  # Now forwarding 4 floats (16 bytes)
+    packet_size = StreamingPacket.PACKET_SIZE_TIME64  # 3*F32 + 1*F64 (20 bytes)
 
     while not stop_event.is_set():
         # Get current connections under lock
@@ -225,7 +225,7 @@ def forward_stream(src_key, dst_key):
                 # Timeout is not fatal, just continue
                 continue
 
-            # Process complete packets (now 16 bytes)
+            # Process complete packets of 20 bytes
             while len(buffer) >= packet_size:
                 packet, buffer = buffer[:packet_size], buffer[packet_size:]
 

@@ -247,14 +247,14 @@ def stream_sender(cr_reactivity, update_event):
                 neutron_density = power_calculator.current_neutron_density
                 rho = power_calculator.current_rho
                 distance = cr_reactivity.distance
-                ts_ms = time.time() * 1000.0  # milliseconds since epoch (float)
+                ts_ms = time.time() * 1000.0  # milliseconds since epoch (float64)
 
                 if counter % 10 == 0:
                     logger.info(f"CR pos: {distance:4.1f} cm, rho: {rho:.5f}, N: {neutron_density:.2e}, t_ms: {ts_ms:.1f}")
                 counter += 1
 
-                # Pack and send the data (4 floats: n, rho, pos, timestamp_ms)
-                data = StreamingPacket.pack_float_quad(neutron_density, rho, distance, ts_ms)
+                # Pack and send the data (3x float32 + 1x float64 timestamp in ms)
+                data = StreamingPacket.pack_triplet_plus_time64(neutron_density, rho, distance, ts_ms)
                 success = stream_socket.send_binary(data)
 
                 if not success:

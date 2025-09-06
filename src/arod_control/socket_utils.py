@@ -346,9 +346,10 @@ class SocketManager:
 class StreamingPacket:
     """Helpers for streaming binary packets."""
 
-    # Sizes for common packet formats
-    PACKET_SIZE_TRIPLET = 12  # 3 x 4 bytes
-    PACKET_SIZE_QUAD = 16     # 4 x 4 bytes
+    # Sizes for packet formats
+    PACKET_SIZE_TRIPLET = 12   # 3 x float32
+    PACKET_SIZE_QUAD = 16      # 4 x float32
+    PACKET_SIZE_TIME64 = 20    # 3 x float32 + 1 x float64 (timestamp ms)
 
     @staticmethod
     def pack_float_triplet(val1: float, val2: float, val3: float) -> bytes:
@@ -369,3 +370,13 @@ class StreamingPacket:
     def unpack_float_quad(data: bytes) -> Tuple[float, float, float, float]:
         """Unpack four floats (big-endian)."""
         return struct.unpack('!ffff', data)
+
+    @staticmethod
+    def pack_triplet_plus_time64(val1: float, val2: float, val3: float, t_ms: float) -> bytes:
+        """Pack three float32 values plus one float64 timestamp in milliseconds."""
+        return struct.pack('!fffd', val1, val2, val3, t_ms)
+
+    @staticmethod
+    def unpack_triplet_plus_time64(data: bytes) -> Tuple[float, float, float, float]:
+        """Unpack three float32 values plus one float64 timestamp in milliseconds."""
+        return struct.unpack('!fffd', data)
