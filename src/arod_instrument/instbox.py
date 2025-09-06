@@ -44,6 +44,7 @@ ctrl_socket = SocketManager(CONTROL_IP, PORT_CTRL, "ctrl_instr")
 
 # Communication queues
 ctrl_status_q = queue.Queue(maxsize=100)  # Limit size to prevent memory issues
+stop_event = threading.Event()
 
 
 def limit_switch_pressed():
@@ -68,7 +69,7 @@ limit_switch.when_released = limit_switch_released
 
 def process_ctrl_status():
     """Process control messages from the queue"""
-    while True:
+    while not stop_event.is_set():
         try:
             # Try to get a message with timeout
             ctrl_status = ctrl_status_q.get(timeout=1)
@@ -191,23 +192,21 @@ def set_speed_of_sound():
 
 def update_speed_of_sound(wait: float = 10 * 60):
     """Periodically update the speed of sound based on temperature and humidity"""
-    while True:
+    while not stop_event.is_set():
         try:
             success = set_speed_of_sound()
-            if success:
-                # Wait for the specified time before next update
-                time.sleep(wait)
-            else:
-                # If failed, retry sooner
-                time.sleep(60)
+            if success:     # Wait for the specified time before next update
+                stop_event.wait(timeout=wait)
+            else:           # If failed, retry sooner
+                stop_event.wait(timeout=60)
         except Exception as e:
             logger.error(f"Error in update_speed_of_sound: {e}")
-            time.sleep(60)  # Retry after short delay on error
+            stop_event.wait(timeout=60)
 
 
 def ctrl_receiver():
     """Receive and process control messages"""
-    while True:
+    while not stop_event.is_set():
         try:
             # Receive a complete JSON message
             data, success = ctrl_socket.receive_json()
@@ -234,7 +233,7 @@ def ctrl_receiver():
 
 def stream_sender(power_calculator, cr_reactivity, update_event):
     """Send stream data to control box"""
-    while True:
+    while not stop_event.is_set():
         try:
             # Wait for signal that new data is available
             update_event.wait(timeout=1.0)
@@ -308,6 +307,7 @@ if __name__ == "__main__":
     finally:
         # Clean shutdown
         logger.info("Closing sockets and cleaning up...")
+        stop_event.set()
         stream_socket.close()
         ctrl_socket.close()
         logger.info("Shutdown complete.")
