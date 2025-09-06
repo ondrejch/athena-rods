@@ -6,6 +6,7 @@ Ondrej Chvala <ochvala@utexas.edu>
 
 import logging
 import socket
+import queue
 import time
 import struct
 import json
@@ -52,9 +53,28 @@ def limit_swich_released():
 limit_switch.when_pressed = limit_switch_pressed
 limit_switch.when_released = limit_swich_released
 
+server_stream: (socket.socket, None) = None
+server_ctrl: (socket.socket, None) = None
+ctrl_status_q = queue.Queue()
+
+
+def process_ctrl_status():
+    while True:
+        try:
+            # Retrieve and process control status messages
+            ctrl_status = ctrl_status_q.get(timeout=1)  # wait max 1 sec for new message
+            # Do something with ctrl_status, e.g., update UI or internal state
+            print("Received control status:", ctrl_status)
+            # Mark task done if using task tracking
+            ctrl_status_q.task_done()
+        except queue.Empty:
+            # No new messages, just continue or do other tasks
+            pass
+        time.sleep(0.1)
+
 
 def rod_lift():
-    """ Temprarily overwrites limit switch to lift the rod reliably """
+    """ Temporarily overwrites limit switch to lift the rod reliably """
     rod_engage()
     limit_switch.when_pressed = None
     motor.up()
@@ -180,36 +200,43 @@ def stream_sender(sock, power_calculator, cr_reactivity, update_event):
         update_event.clear()
 
 
-# def ctrl_sender(sock):
-#     while True:
-#             switch_msg = {"type": "limit_switch", "value": ""}
-#             sock.sendall((json.dumps(switch_msg) + '\n').encode('utf-8'))
-#         time.sleep(1)
-
-
 def ctrl_receiver(sock):
-    """Receive and log control settings from a socket connection.
-    Parameters:
-        - sock (socket.socket): A socket object to receive data from.
-    Returns:
-        - None: This function does not return any value; it processes and logs incoming data."""
     buffer = b""
     while True:
-        msg = sock.recv(1024)
-        if not msg:
-            break
-        buffer += msg
-        while b'\n' in buffer:
-            line, buffer = buffer.split(b'\n', 1)
+        try:
+            msg = sock.recv(1024)
+            if not msg:
+                raise ConnectionResetError("Socket closed by the server")
+            buffer += msg
+            while b'\n' in buffer:
+                line, buffer = buffer.split(b'\n', 1)
+                try:
+                    # Validate and enqueue JSON message
+                    ctrl_data = json.loads(line.decode('utf-8'))
+                    ctrl_status_q.put(ctrl_data)
+                except json.JSONDecodeError:
+                    # Ignore invalid JSON lines
+                    continue
+        except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            logger.info(f"ctrl_receiver connection error: {e}. Attempting to reconnect...")
+            # Close current socket safely
             try:
-                data = json.loads(line.decode('utf-8'))  # TODO - use the data!
-                logger.info(f"Received control setting: {data}")
-            except json.JSONDecodeError:
-                logger.info(f"Invalid JSON received: {line}")
-                continue
-            except Exception as e:
-                logger.info(f"Unexpected exception in ctrl_receiver: {e}")
-                continue
+                sock.close()
+            except Exception as close_err:
+                logger.warning(f"Error closing ctrl socket during reconnect: {close_err}")
+            # Attempt reconnect loop
+            while True:
+                try:
+                    sock = connect_with_retry(CONTROL_IP, PORT_CTRL, "ctrl_instr")
+                    logger.info("ctrl_receiver reconnected.")
+                    break  # Exit reconnect loop
+                except Exception as conn_err:
+                    logger.error(f"ctrl_receiver reconnect failed: {conn_err}")
+                    time.sleep(2)
+            buffer = b""  # Clear buffer on reconnect to avoid stale partial data
+        except Exception as e:
+            logger.info(f"Unexpected error in ctrl_receiver: {e}. Continuing...")
+            continue
 
 
 def main():
@@ -220,6 +247,7 @@ def main():
         None: This function does not return any value."""
     threading.Thread(target=update_speed_of_sound, daemon=True).start()
 
+    global stream_sock, ctrl_sock
     stream_sock = connect_with_retry(CONTROL_IP, PORT_STREAM, "stream_instr")
     ctrl_sock = connect_with_retry(CONTROL_IP, PORT_CTRL, "ctrl_instr")
 
@@ -232,6 +260,7 @@ def main():
     power_calculator.start()
     threading.Thread(target=stream_sender, args=(stream_sock, power_calculator, cr_reactivity, update_event),
                      daemon=True).start()
+    threading.Thread(target=process_ctrl_status, daemon=True).start()
 
     while True:
         time.sleep(5)

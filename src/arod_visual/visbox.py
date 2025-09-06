@@ -16,6 +16,8 @@ from arod_control import PORT_CTRL, PORT_STREAM, CONTROL_IP
 
 stream_data_q = queue.Queue()
 ctrl_status_q = queue.Queue()
+stream_sock: (socket.socket, None) = None
+ctrl_sock: (socket.socket, None) = None
 
 
 def connect_with_retry(host, port, handshake, delay=5):
@@ -46,11 +48,12 @@ def stream_receiver(sock):
         - None: This function does not return anything. It processes data as it is received, unpacking and queuing it."""
     try:
         while True:
-            data = sock.recv(8)
-            if not data or len(data) < 8:
+            data = sock.recv(12)
+            if not data or len(data) < 12:
                 break
             neutron_density, rho, position = struct.unpack('!fff', data)
             stream_data_q.put((neutron_density, rho,  position))
+            print(neutron_density, rho,  position)
     except Exception as e:
         print("Stream receive error:", e)
 
@@ -91,7 +94,6 @@ app.layout = html.Div([
 
 
 def start_connections():
-    global stream_sock, ctrl_sock
     stream_sock = connect_with_retry(CONTROL_IP, PORT_STREAM, "stream_display")
     ctrl_sock = connect_with_retry(CONTROL_IP, PORT_CTRL, "ctrl_display")
     threading.Thread(target=stream_receiver, args=(stream_sock,), daemon=True).start()
@@ -156,7 +158,9 @@ if __name__ == "__main__":
         start_connections()
         app.run(debug=False)
     except KeyboardInterrupt:
-        global stream_sock, ctrl_sock
         print("Ctrl+C detected, closing sockets...")
-        stream_sock.close()
-        ctrl_sock.close()
+        try:
+            stream_sock.close()
+            ctrl_sock.close()
+        except Exception as e:
+            print("Error closing sockets:", e)

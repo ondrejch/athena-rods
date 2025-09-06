@@ -80,7 +80,17 @@ def accept_connections(server, role, conn_key):
     """ Socket communication: accepting client connections """
     while True:
         time.sleep(0.5)
-        conn, addr = server.accept()
+        try:
+            conn, addr = server.accept()
+            logger.info(f"Incoming connection for {role} from {addr}")
+        except OSError as e:
+            if e.errno == 9:  # Bad file descriptor, socket likely closed, exit cleanly
+                logger.info(f"Accept thread for {role} exiting due to socket close")
+                break
+            else:
+                logger.warning(f"Unexpected OSError in accept_connections: {e}")
+                time.sleep(1)
+                continue
         try:
             handshake = conn.recv(32).decode('utf-8').strip()
         except Exception:
@@ -101,53 +111,129 @@ def accept_connections(server, role, conn_key):
         logger.info(f"Socket connection: {role} connected from {addr}")
 
 
+# # def forward_stream(src_key, dst_key):
+# #     """ Socket communication: forwarding stream from Instrumentation to Display computers """
+# #     while True:
+# #         with lock:
+# #             src_sock = connections.get(src_key)
+# #             dst_sock = connections.get(dst_key)
+# #         if not src_sock or not dst_sock:
+# #             time.sleep(0.1)
+# #             continue
+# #         try:
+# #             data = src_sock.recv(12)  # 3 floats: neutron_density, reactivity, and distance
+# #             if not data:               # Connection closed gracefully, retry after short delay
+# #                 logger.info(f"Connection closed for {src_key}, attempting to reconnect...")
+# #                 with lock:
+# #                     connections[src_key] = None
+# #                     connections[dst_key] = None
+# #                 time.sleep(2)
+# #                 continue  # retry loop
+# #             dst_sock.sendall(data)
+# #         except (ConnectionResetError, BrokenPipeError) as e:
+# #             logger.info(f"Stream {src_key} to {dst_key} error: {e}. Retrying connection...")
+# #             with lock:
+# #                 connections[src_key] = None
+# #                 connections[dst_key] = None
+# #             # Implement reconnect logic here or rely on accept_connections to update sockets
+# #             time.sleep(2)  # wait before retrying
+# #             continue  # retry loop
+# #         except Exception as e:
+# #             logger.info(f"Unexpected error in forward_stream between {src_key} and {dst_key}: {e}. Retrying...")
+# #             time.sleep(2)
+# #             continue
+# #
+# # # def forward_stream(src_key, dst_key):
+# # #     """ Socket communication: forwarding stream from Instrumentation to Display computers """
+# # #     while True:
+# # #         with lock:
+# # #             src_sock = connections.get(src_key)
+# # #             dst_sock = connections.get(dst_key)
+# # #         if not src_sock or not dst_sock:
+# # #             continue
+# # #         try:
+# # #             data = src_sock.recv(12)  # 3 floats: neutron_density, reactivity, and distance
+# # #             if not data:
+# # #                 break
+# # #             dst_sock.sendall(data)
+# # #         except Exception as e:
+# # #             logger.info(f"Stream {src_key} to {dst_key} error: {e}")
+# # #             break
+
 def forward_stream(src_key, dst_key):
-    """ Socket communication: forwarding stream from Instrumentation to Display computers """
     while True:
         with lock:
             src_sock = connections.get(src_key)
             dst_sock = connections.get(dst_key)
         if not src_sock or not dst_sock:
+            time.sleep(0.1)
             continue
         try:
-            data = src_sock.recv(12)  # 3 floats: neutron_density, reactivity, and distance
+            data = src_sock.recv(12)
             if not data:
-                break
+                logger.info(f"Connection closed from {src_key}, cleaning connection and retrying...")
+                with lock:
+                    connections[src_key] = None
+                time.sleep(2)
+                continue
             dst_sock.sendall(data)
+        except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            logger.info(f"Stream {src_key} to {dst_key} error: {e}. Cleaning connection and retrying...")
+            with lock:
+                connections[src_key] = None
+            time.sleep(2)
+            continue
         except Exception as e:
-            logger.info(f"Stream {src_key} to {dst_key} error:", e)
-            break
+            logger.info(f"Unexpected error in forwarding stream {src_key} to {dst_key}: {e}. Retrying...")
+            time.sleep(2)
+            continue
 
 
 def forward_ctrl(src_key, dst_key):
-    """ Socket communication: Forwarding JSON-formatted messages """
+    """
+    Socket communication: Forwarding JSON-formatted messages between control sockets.
+    Handles disconnects, JSON parse errors, and cleans up only the affected connection.
+    """
     buffer = b""
     while True:
         with lock:
             src_sock = connections.get(src_key)
             dst_sock = connections.get(dst_key)
         if not src_sock or not dst_sock:
+            time.sleep(0.1)
             continue
         try:
             msg = src_sock.recv(1024)
             if not msg:
-                break
+                logger.info(f"Connection closed from {src_key}, cleaning connection and retrying...")
+                with lock:
+                    connections[src_key] = None
+                time.sleep(2)
+                continue
+
             buffer += msg
             while b'\n' in buffer:
                 line, buffer = buffer.split(b'\n', 1)
                 try:
-                    json.loads(line.decode('utf-8'))  # parse, just check validity
+                    # Validate JSON before forwarding
+                    json.loads(line.decode('utf-8'))
                     dst_sock.sendall(line + b'\n')
                 except json.JSONDecodeError:
-                    # Invalid JSON, skip this line
                     logger.info(f"Invalid JSON received on {src_key}: {line}")
+                    # skip bad json line
                     continue
-                except Exception as e:
-                    logger.info(f"Unexpected exception in forward_ctrl JSON parse: {e}")
-                    continue
+
+        except (ConnectionResetError, BrokenPipeError) as e:
+            logger.info(f"Control {src_key} to {dst_key} error: {e}. Cleaning connection and retrying...")
+            with lock:
+                connections[src_key] = None
+            time.sleep(2)
+            continue
+
         except Exception as e:
-            logger.info(f"Control {src_key} to {dst_key} error: {e}")
-            break
+            logger.info(f"Unexpected error in forwarding control message {src_key} to {dst_key}: {e}. Retrying...")
+            time.sleep(2)
+            continue
 
 
 def run_leds():
