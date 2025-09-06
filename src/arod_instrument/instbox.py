@@ -128,7 +128,7 @@ def process_ctrl_status(cr_reactivity):
         except Exception as e:
             logger.error(f"Error processing control status: {e}")
 
-        time.sleep(0.1)
+        time.sleep(0.01)
 
 
 def rod_lift():
@@ -246,7 +246,7 @@ def ctrl_receiver():
                             logger.warning("Control queue management error")
                 # Don't wait if we had a successful read, even without data
                 # This allows more responsive processing of partial messages
-                time.sleep(0.1)
+                time.sleep(0.01)
             else:
                 # Connection issue, wait longer before retry
                 stop_event.wait(timeout=1)
@@ -312,7 +312,7 @@ def main():
 
     # Start power calculator
     global power_calculator
-    power_calculator = ReactorPowerCalculator(cr_reactivity.get_reactivity, dt=0.1, update_event=update_event)
+    power_calculator = ReactorPowerCalculator(cr_reactivity.get_reactivity, dt=0.05, update_event=update_event)
     power_calculator.start()
 
     # Start control message processor, passing the state-holding object
