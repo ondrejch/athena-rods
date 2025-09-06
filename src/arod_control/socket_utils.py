@@ -29,9 +29,10 @@ class SocketManager:
         self.host = host
         self.port = port
         self.handshake = handshake
-        self.socket = None
+        self.socket: Optional[socket.socket] = None
         self.connected = False
-        self.lock = threading.Lock()
+        # Use a re-entrant lock to allow nested acquisition within class methods
+        self.lock = threading.RLock()
         self.buffer = b""
         self.reconnect_delay = 1  # Starting delay (seconds)
         self.max_delay = 30  # Maximum delay (seconds)
@@ -182,6 +183,7 @@ class SocketManager:
                     return False
 
             try:
+                assert self.socket is not None
                 self.socket.sendall(data)
                 return True
             except Exception as e:
@@ -223,6 +225,7 @@ class SocketManager:
                     return b"", False
 
             try:
+                assert self.socket is not None
                 data = self.socket.recv(size)
                 if not data:
                     logger.info("Connection closed by peer")
@@ -259,17 +262,19 @@ class SocketManager:
             # Use shorter timeouts for individual receives to allow for shutdown checks
             with self.lock:
                 if self.socket:
-                    self.socket.settimeout(min(0.5, end_time - time.time()))
+                    try:
+                        self.socket.settimeout(min(0.5, max(0.0, end_time - time.time())))
+                    except Exception:
+                        pass
 
             chunk, success = self.receive(remaining)
 
             if self._shutdown_requested:
                 return b"", False
 
-            if not success:
-                # Only return failure if it's an actual error, not a timeout
-                if not chunk:
-                    return b"", False
+            if not success and not chunk:
+                # Actual error (not just timeout)
+                return b"", False
 
             if chunk:
                 result += chunk
@@ -282,53 +287,63 @@ class SocketManager:
         return result, len(result) == size
 
     def receive_json(self) -> Tuple[Dict[str, Any], bool]:
-        """Receive and parse JSON data"""
+        """Receive and parse a single line-delimited JSON object.
+
+        Returns:
+            (data, success): data is the parsed dict or {}, success indicates the I/O call didn't hard-fail.
+            success can be True with {} when no complete JSON line is available yet.
+        """
         if self._shutdown_requested:
             return {}, False
 
+        # Briefly set a shorter timeout while holding the lock
         with self.lock:
-            try:
-                if self.socket:
-                    self.socket.settimeout(0.5)
-
-                data, success = self.receive(1024)
-                if not success and not data:
-                    return {}, False
-
-                if data:
-                    self.buffer += data
-
-                # Need a full line
-                if b'\n' not in self.buffer:
-                    return {}, True
-
-                line, self.buffer = self.buffer.split(b'\n', 1)
-                if not line:
-                    return {}, True
-
-                # Try JSON first
+            if self.socket:
                 try:
-                    result = json.loads(line.decode('utf-8'))
-                    return result, True
-                except json.JSONDecodeError:
-                    # Swallow common non-JSON control acks silently
-                    try:
-                        text = line.decode('utf-8', errors='ignore').strip()
-                        if text.startswith('OK:') or text.startswith('REJECT:'):
-                            return {}, True
-                    except Exception:
-                        pass
-                    # Not JSON, not a known ack: ignore silently
-                    return {}, True
+                    self.socket.settimeout(0.5)
+                except Exception:
+                    pass
 
-            except Exception as e:
-                logger.error(f"Error receiving JSON data: {e}")
-                self.connected = False
-                return {}, False
+        # Perform the potentially blocking recv outside of the lock to avoid nested locking
+        data, success = self.receive(1024)
+        if not success and not data:
+            # Hard failure or remote closed
+            return {}, False
+
+        if data:
+            # Safely append to internal buffer
+            with self.lock:
+                self.buffer += data
+
+        # Try to parse a complete line-delimited JSON message
+        with self.lock:
+            if b'\n' not in self.buffer:
+                # No full line yet; not an error
+                return {}, True
+
+            line, self.buffer = self.buffer.split(b'\n', 1)
+
+        if not line.strip():
+            # Empty line; not an error
+            return {}, True
+
+        # Try JSON first
+        try:
+            result = json.loads(line.decode('utf-8'))
+            return result, True
+        except json.JSONDecodeError:
+            # Swallow common non-JSON control acks silently if any ever appear
+            try:
+                text = line.decode('utf-8', errors='ignore').strip()
+                if text.startswith('OK:') or text.startswith('REJECT:'):
+                    return {}, True
+            except Exception:
+                pass
+            # Not JSON; ignore this line without failing the stream
+            return {}, True
 
 
 class StreamingPacket:
-    # unchanged
     @staticmethod
     def pack_float_triplet(val1: float, val2: float, val3: float) -> bytes:
         return struct.pack('!fff', val1, val2, val3)

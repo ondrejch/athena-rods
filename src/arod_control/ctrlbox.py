@@ -168,7 +168,6 @@ def accept_ctrl_connections():
                 continue
 
             # No 'OK:CONNECTED' either; keep channel JSON-only
-
             with connection_lock:
                 old = connections.get(handshake)
                 if old is not None:
