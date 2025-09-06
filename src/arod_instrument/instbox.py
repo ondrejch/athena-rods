@@ -276,6 +276,7 @@ def main():
     update_event = threading.Event()
 
     # Start power calculator
+    global power_calculator
     power_calculator = ReactorPowerCalculator(cr_reactivity.get_reactivity, dt=0.1, update_event=update_event)
     power_calculator.start()
 
