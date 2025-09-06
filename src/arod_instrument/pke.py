@@ -50,6 +50,7 @@ class ReactorPowerCalculator(threading.Thread):
         beta = self.solver.beta
         lambda_ = self.solver.lambda_
         Lambda = self.solver.Lambda
+        beta_total = self.solver.beta_total
 
         # Initial steady-state conditions
         n0 = 1.0
@@ -84,7 +85,7 @@ class ReactorPowerCalculator(threading.Thread):
 
             current_time = time.time() - start_time
             if self.DEBUG > 2:
-                print(f"{current_time:.2f}\t{rho:.6f}\t{neutron_density:.6f}")
+                print(f"{current_time:.2f}\t{rho/beta_total:.6f}\t{neutron_density:.6f}")
 
             self.results.append((current_time, rho, neutron_density))
             self.current_rho = rho
@@ -97,7 +98,7 @@ class ReactorPowerCalculator(threading.Thread):
             # Sleep to maintain real-time pacing
             t_current += self.dt
             elapsed = time.time() - start_time - t_current
-            print("Timing: ", elapsed, time.time(), start_time, t_current)
+            # print("Timing: ", elapsed, time.time(), start_time, t_current)
             time.sleep(max(0, self.dt - elapsed))
 
     def stop(self):
