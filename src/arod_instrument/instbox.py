@@ -166,6 +166,7 @@ def connect_with_retry(host, port, handshake, delay=1, max_retries=None):
 
 
 def stream_sender(sock, power_calculator, cr_reactivity, update_event):
+    current_delay = 1
     while True:
         update_event.wait()  # Wait until power_calculator signals data ready
         neutron_density = power_calculator.current_neutron_density
@@ -173,35 +174,33 @@ def stream_sender(sock, power_calculator, cr_reactivity, update_event):
         distance = cr_reactivity.distance
         try:
             sock.sendall(struct.pack('!fff', neutron_density, rho, distance))
+            current_delay = 1  # reset delay on success
         except Exception as e:
             logger.error(f"stream_sender error: {e}")
-            # Attempt to reconnect before retrying send
+            try:
+                sock.close()
+            except Exception as close_exc:
+                logger.warning(f"Error closing socket during reconnect: {close_exc}")
             while True:
-                try:  # Close current socket safely
-                    sock.close()
-                except Exception as close_exc:
-                    logger.warning(f"Error closing socket during reconnect: {close_exc}")
-
                 try:
                     logger.info("stream_sender attempting to reconnect...")
                     sock = connect_with_retry(CONTROL_IP, PORT_STREAM, "stream_instr")
                     logger.info("stream_sender reconnected.")
-                    break  # Exit reconnect loop
+                    break
                 except Exception as conn_exc:
                     logger.error(f"stream_sender reconnect failed: {conn_exc}")
-                    time.sleep(2)  # wait before retrying reconnection
-
-            # After reconnect, send the current data before continuing loop
+                    time.sleep(current_delay)
+                    current_delay = min(current_delay * 2, 60)  # exponential backoff
             try:
                 sock.sendall(struct.pack('!fff', neutron_density, rho, distance))
             except Exception as send_exc:
                 logger.error(f"stream_sender send after reconnect failed: {send_exc}")
-
-        update_event.clear()
+            update_event.clear()
 
 
 def ctrl_receiver(sock):
     buffer = b""
+    current_delay = 1
     while True:
         try:
             msg = sock.recv(1024)
@@ -211,33 +210,30 @@ def ctrl_receiver(sock):
             while b'\n' in buffer:
                 line, buffer = buffer.split(b'\n', 1)
                 try:
-                    # Validate and enqueue JSON message
                     ctrl_data = json.loads(line.decode('utf-8'))
                     ctrl_status_q.put(ctrl_data)
                 except json.JSONDecodeError:
-                    # Ignore invalid JSON lines
                     continue
+            current_delay = 1
         except (ConnectionResetError, BrokenPipeError, OSError) as e:
             logger.info(f"ctrl_receiver connection error: {e}. Attempting to reconnect...")
-            # Close current socket safely
             try:
                 sock.close()
             except Exception as close_err:
                 logger.warning(f"Error closing ctrl socket during reconnect: {close_err}")
-            # Attempt reconnect loop
             while True:
                 try:
                     sock = connect_with_retry(CONTROL_IP, PORT_CTRL, "ctrl_instr")
                     logger.info("ctrl_receiver reconnected.")
-                    break  # Exit reconnect loop
+                    break
                 except Exception as conn_err:
                     logger.error(f"ctrl_receiver reconnect failed: {conn_err}")
-                    time.sleep(2)
-            buffer = b""  # Clear buffer on reconnect to avoid stale partial data
+                    time.sleep(current_delay)
+                    current_delay = min(current_delay * 2, 60)
+            buffer = b""
         except Exception as e:
             logger.info(f"Unexpected error in ctrl_receiver: {e}. Continuing...")
             continue
-
 
 def main():
     """Starts multiple threads to handle the communication and updates for an instrumentation system.

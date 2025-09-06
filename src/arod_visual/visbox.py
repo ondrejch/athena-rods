@@ -16,8 +16,6 @@ from arod_control import PORT_CTRL, PORT_STREAM, CONTROL_IP
 
 stream_data_q = queue.Queue()
 ctrl_status_q = queue.Queue()
-stream_sock: (socket.socket, None) = None
-ctrl_sock: (socket.socket, None) = None
 
 
 def connect_with_retry(host, port, handshake, delay=5):
@@ -40,42 +38,57 @@ def connect_with_retry(host, port, handshake, delay=5):
             time.sleep(delay)
 
 
-def stream_receiver(sock):
-    """Receives and processes continuous data stream from a socket.
-    Parameters:
-        - sock (socket): A socket object from which to receive the data.
-    Returns:
-        - None: This function does not return anything. It processes data as it is received, unpacking and queuing it."""
-    try:
-        while True:
-            data = sock.recv(12)
+def stream_receiver():
+    """Receives and processes continuous data stream from a socket."""
+    global stream_sock
+    while True:
+        try:
+            data = stream_sock.recv(12)
             if not data or len(data) < 12:
-                break
+                print("Stream socket closed, reconnecting...")
+                stream_sock.close()
+                stream_sock = connect_with_retry(CONTROL_IP, PORT_STREAM, "stream_display")
+                continue
             neutron_density, rho, position = struct.unpack('!fff', data)
-            stream_data_q.put((neutron_density, rho,  position))
-            print(neutron_density, rho,  position)
-    except Exception as e:
-        print("Stream receive error:", e)
+            stream_data_q.put((neutron_density, rho, position))
+            print(neutron_density, rho, position)
+        except Exception as e:
+            print("Stream receive error:", e)
+            try:
+                stream_sock.close()
+            except Exception:
+                pass
+            stream_sock = connect_with_retry(CONTROL_IP, PORT_STREAM, "stream_display")
 
 
-def ctrl_receiver(sock):
-    """Receives messages from a socket and updates a queue with JSON-decoded status.
-    Parameters:
-        - sock (socket.socket): The socket object from which to receive messages.
-    Returns:
-        - None: This function does not return a value; it processes incoming data continuously until the connection is closed."""
+def ctrl_receiver():
+    """Receives messages from a socket and updates a queue with JSON-decoded status."""
+    global ctrl_sock
     buffer = b""
     while True:
-        msg = sock.recv(1024)
-        if not msg:
-            break
-        buffer += msg
-        while b'\n' in buffer:
-            line, buffer = buffer.split(b'\n', 1)
-            try:
-                ctrl_status_q.put(json.loads(line.decode('utf-8')))
-            except:
+        try:
+            msg = ctrl_sock.recv(1024)
+            if not msg:
+                print("Ctrl socket closed, reconnecting...")
+                ctrl_sock.close()
+                ctrl_sock = connect_with_retry(CONTROL_IP, PORT_CTRL, "ctrl_display")
+                buffer = b""
                 continue
+            buffer += msg
+            while b'\n' in buffer:
+                line, buffer = buffer.split(b'\n', 1)
+                try:
+                    ctrl_status_q.put(json.loads(line.decode('utf-8')))
+                except:
+                    continue
+        except Exception as e:
+            print(f"Ctrl receive error: {e}")
+            try:
+                ctrl_sock.close()
+            except Exception:
+                pass
+            ctrl_sock = connect_with_retry(CONTROL_IP, PORT_CTRL, "ctrl_display")
+            buffer = b""
 
 
 app = Dash(__name__)
@@ -94,10 +107,11 @@ app.layout = html.Div([
 
 
 def start_connections():
+    global stream_sock, ctrl_sock
     stream_sock = connect_with_retry(CONTROL_IP, PORT_STREAM, "stream_display")
     ctrl_sock = connect_with_retry(CONTROL_IP, PORT_CTRL, "ctrl_display")
-    threading.Thread(target=stream_receiver, args=(stream_sock,), daemon=True).start()
-    threading.Thread(target=ctrl_receiver, args=(ctrl_sock,), daemon=True).start()
+    threading.Thread(target=stream_receiver, daemon=True).start()
+    threading.Thread(target=ctrl_receiver, daemon=True).start()
 
 
 @app.callback(

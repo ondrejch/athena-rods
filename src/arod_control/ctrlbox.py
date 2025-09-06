@@ -89,8 +89,8 @@ def accept_connections(server, role, conn_key):
                 break
             else:
                 logger.warning(f"Unexpected OSError in accept_connections: {e}")
-                time.sleep(1)
-                continue
+            time.sleep(1)
+            continue
         try:
             handshake = conn.recv(32).decode('utf-8').strip()
         except Exception:
@@ -107,8 +107,16 @@ def accept_connections(server, role, conn_key):
             conn.close()
             continue
         with lock:
+            old_conn = connections.get(conn_key)  # Close previous connection if exists before replacing
+            if old_conn is not None:
+                try:
+                    old_conn.shutdown(socket.SHUT_RDWR)
+                    old_conn.close()
+                except Exception:
+                    pass
             connections[conn_key] = conn
-        logger.info(f"Socket connection: {role} connected from {addr}")
+            logger.info(f"Socket connection: {role} connected from {addr}")
+
 
 
 # # def forward_stream(src_key, dst_key):
