@@ -40,6 +40,14 @@ class ReactorPowerCalculator(threading.Thread):
         self.update_event = update_event  # New event for signaling updates
         self.DEBUG = 0
 
+    def set_source(self, strength):
+        """Set the external neutron source strength
+
+        Args:
+            strength (float): Source strength to set (0.0 = off)
+        """
+        self.source_strength = strength  # No need to update solver.source_func since it references self.source_strength
+
     def run(self):
         """Execute a time-dependent simulation of neutron density in nuclear reactor kinetics.
         Parameters:
