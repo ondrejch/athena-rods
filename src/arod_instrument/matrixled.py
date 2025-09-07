@@ -75,6 +75,10 @@ def shutDown():
     device.clear()  # Turns off all LEDs
 
 
+def ledsOff():
+    device.clear()  # Turns off all LEDs
+
+
 def main():
     while True:
         # scrollToDisplayText("Welcome to ATHENA-rod")

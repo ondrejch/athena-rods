@@ -295,7 +295,7 @@ def matrix_led_driver(cr_reactivity):
     """ Driver for matrix LED display; both motor and stop_event are global scope """
     from matrixled import arrowUp, arrowDown, notMoving
     from matrixled import startUp as matrix_led_start_up
-    from matrixled import shutDown as matrix_led_shut_down
+    from matrixled import ledsOff as matrix_led_shut_down
     logger.info("Matrix LED display thread started")
     h_min: float = 3.0
     h_max: float = MAX_ROD_DISTANCE
