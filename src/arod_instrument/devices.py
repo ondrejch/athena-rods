@@ -18,7 +18,7 @@ class Motor(OriginalMotor):
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.speed: float = 1.0  # Default motor speed
+        self.speed: float = 0.5  # Default motor speed
         self._status: int = 0    # Private status variable, represents direction: 1 (up), -1 (down), 0 (stopped)
         self.status_cond = threading.Condition()  # Condition variable for status changes
 
@@ -38,13 +38,11 @@ class Motor(OriginalMotor):
 
     def up(self):
         """Moves the motor up (backward) and sets status to 1."""
-        self.speed = 1.0
         self.backward(self.speed)
         self._set_status(1)
 
     def down(self):
         """Moves the motor down (forward) and sets status to -1."""
-        self.speed = 1.0
         self.forward(self.speed)
         self._set_status(-1)
 
