@@ -302,7 +302,7 @@ def forward_ctrl(src_key, dst_key):
         failed_srcs = []
         for src_sock in src_socks:
             try:
-                src_sock.settimeout(0.01) # non-blocking
+                src_sock.settimeout(0.1)  # non-blocking
                 chunk = src_sock.recv(1024)
                 if not chunk:
                     raise ConnectionResetError(f"Connection closed from a {src_key} client")
@@ -318,10 +318,11 @@ def forward_ctrl(src_key, dst_key):
                 logger.info(f"Control connection error with a {src_key} client: {e}")
                 failed_srcs.append(src_sock)
                 if src_sock in buffers:
-                    del buffers[src_sock] # Clean up buffer for disconnected client
+                    del buffers[src_sock]  # Clean up buffer for disconnected client
                 continue
             except Exception as e:
-                if stop_event.is_set(): break
+                if stop_event.is_set():
+                    break
                 logger.error(f"Unexpected error receiving from a {src_key} client: {e}")
                 failed_srcs.append(src_sock)
                 if src_sock in buffers:
@@ -359,7 +360,7 @@ def forward_ctrl(src_key, dst_key):
                 except json.JSONDecodeError as e:
                     logger.warning(f"Invalid JSON from {src_key}: {e}, data: {line[:100]}")
                     continue
-            buffers[src_sock] = buffer # Put remaining part back
+            buffers[src_sock] = buffer  # Put remaining part back
 
         if failed_srcs and is_src_broadcast:
             with connection_lock:
@@ -370,7 +371,7 @@ def forward_ctrl(src_key, dst_key):
                     except (ValueError, Exception): pass
                 logger.info(f"Removed {len(failed_srcs)} failed {src_key} clients. Remaining: {len(connections[src_key])}")
 
-        time.sleep(0.01)
+        stop_event.wait(timeout=0.5)
 
 
 def run_leds():
@@ -378,7 +379,7 @@ def run_leds():
     leds = LEDs()
     logger.info('LEDs thread initialized')
     while not stop_event.is_set():
-        time.sleep(CB_STATE['refresh']['leds'])
+        stop_event.wait(timeout=CB_STATE['refresh']['leds'])
 
         # Set blue and led status
         global connections
@@ -581,7 +582,7 @@ def main_loop():
         while True:
             time.sleep(5)  # Optional: Health check could go here
     except KeyboardInterrupt:
-        logger.info("Threads: threading.active_count()\nKeyboard interrupt received, shutting down")
+        logger.info(f"Threads: {threading.active_count()}\nKeyboard interrupt received, shutting down")
         stop_event.set()
 
 

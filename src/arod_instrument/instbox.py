@@ -420,7 +420,7 @@ def main():
         while not stop_event.is_set():
             stop_event.wait(timeout=5.0)
     except KeyboardInterrupt:
-        logger.info(f"Threads: threading.active_count()\nKeyboard interrupt detected, shutting down...")
+        logger.info(f"Threads: {threading.active_count()}\nKeyboard interrupt detected, shutting down...")
         return
 
 
