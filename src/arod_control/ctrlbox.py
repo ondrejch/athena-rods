@@ -135,7 +135,7 @@ def accept_stream_connections():
             if stop_event.is_set():
                 break
             logger.error(f"Error in accept_stream_connections: {e}")
-            time.sleep(1)
+            stop_event.wait(timeout=1)
 
 
 def accept_ctrl_connections():
@@ -204,7 +204,7 @@ def accept_ctrl_connections():
             if stop_event.is_set():
                 break
             logger.error(f"Error in accept_ctrl_connections: {e}")
-            time.sleep(1)
+            stop_event.wait(timeout=1)
 
 
 def forward_stream(src_key, dst_key):
@@ -224,7 +224,8 @@ def forward_stream(src_key, dst_key):
             dst_socks = [s for s in dst_socks if s]  # Filter out None
 
         if not src_sock or not dst_socks:
-            time.sleep(0.1)
+            if stop_event.wait(timeout=0.1):
+                break
             continue
 
         try:
@@ -267,14 +268,14 @@ def forward_stream(src_key, dst_key):
                         src_sock.close()
                     except: pass
                     connections[src_key] = None
-            time.sleep(0.5)
+            stop_event.wait(timeout=0.5)
         except socket.timeout:
             continue
         except Exception as e:
             if stop_event.is_set():
                 break
             logger.error(f"Unexpected error in forward_stream between {src_key} and {dst_key}: {e}")
-            time.sleep(0.5)
+            stop_event.wait(timeout=0.5)
 
 
 def forward_ctrl(src_key, dst_key):
@@ -286,7 +287,7 @@ def forward_ctrl(src_key, dst_key):
     is_dst_broadcast = (dst_key == "ctrl_display")
 
     # We need a separate buffer for each source socket in a many-to-one scenario
-    buffers = {} # socket -> buffer bytes
+    buffers = {}  # socket -> buffer bytes
 
     while not stop_event.is_set():
         with connection_lock:
@@ -296,7 +297,8 @@ def forward_ctrl(src_key, dst_key):
             dst_socks = [s for s in dst_socks if s]
 
         if not src_socks or not dst_socks:
-            time.sleep(0.1)
+            if stop_event.wait(timeout=0.1):
+                break
             continue
 
         failed_srcs = []
@@ -379,8 +381,6 @@ def run_leds():
     leds = LEDs()
     logger.info('LEDs thread initialized')
     while not stop_event.is_set():
-        stop_event.wait(timeout=CB_STATE['refresh']['leds'])
-
         # Set blue and led status
         global connections
         if connections["stream_instr"] and connections["ctrl_instr"]:
@@ -403,6 +403,7 @@ def run_leds():
                     leds.turn_off(i_led=i)
                 else:
                     leds.turn_on(i_led=i)
+        stop_event.wait(timeout=CB_STATE['refresh']['leds'])
 
 
 def run_display():
