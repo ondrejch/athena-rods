@@ -132,7 +132,7 @@ def process_ctrl_status(cr_reactivity):
 
 
 def rod_lift():
-    """Temporarily overwrites limit switch to lift the rod reliably"""
+    """ Temporarily overwrites limit switch to lift the rod reliably """
     try:
         rod_engage()
         original_callback = limit_switch.when_pressed
@@ -141,7 +141,7 @@ def rod_lift():
         time.sleep(0.7)
         motor.stop()
         limit_switch.when_pressed = original_callback
-        logger.info("Rod lifted successfully")
+        logger.info(f"Rod lifted successfully: {limit_switch.is_pressed}")
     except Exception as e:
         logger.error(f"Error during rod_lift: {e}")
         motor.stop()  # Safety stop
@@ -149,8 +149,7 @@ def rod_lift():
 
 
 class Reactivity:
-    """Control rod reactivity class"""
-
+    """ Control rod reactivity class """
     def __init__(self):
         super().__init__()
         self.cr_min: float = 5.0  # Rod minimum controlled position [cm]
@@ -292,6 +291,47 @@ def stream_sender(reactivity_obj, update_event):
             stop_event.wait(timeout=1)
 
 
+def matrix_led_driver(cr_reactivity):
+    """ Driver for matrix LED display; both motor and stop_event are global scope """
+    from matrixled import arrowUp, arrowDown, notMoving
+    from matrixled import startUp as matrix_led_start_up
+    from matrixled import shutDown as matrix_led_shut_down
+    logger.info("Matrix LED display thread started")
+    h_min: float = 3.0
+    h_max: float = MAX_ROD_DISTANCE
+    dh: float = h_max - h_min
+    matrix_led_start_up()
+    while not stop_event.is_set():
+        # Wait for a change, but be interruptible by stop_event
+        status_changed, new_status = motor.wait_for_status_change(stop_event)
+
+        # If the wait was interrupted by the stop_event, exit the loop
+        if stop_event.is_set():
+            break
+
+        # If the status actually changed, act on it
+        if status_changed:
+            old_status = new_status
+            move: int = 0
+            while old_status == new_status:
+                ih: int = int(8.0 * (cr_reactivity.distance - h_min) / (h_max - h_min))
+                if ih < 0:
+                    ih = 0
+                if ih > 8:
+                    ih = 8
+                if motor.status == 0:
+                    notMoving(move, ih)
+                elif motor.status == -1:
+                    arrowDown(move, ih)
+                elif motor.status == 1:
+                    arrowUp(move, ih)
+                else:
+                    logger.error(f"Motor status: {motor.status}")
+                stop_event.wait(timeout=0.2)
+                new_status = motor.status
+    matrix_led_shut_down()
+
+
 def main():
     """Main function that initializes all components and starts threads"""
     # Start speed of sound update thread
@@ -309,6 +349,9 @@ def main():
     # Initialize reactivity calculation - this object now holds the state
     cr_reactivity = Reactivity()
     update_event = threading.Event()
+
+    # Start matrix LED thread
+    threading.Thread(target=matrix_led_driver, args=(cr_reactivity,), daemon=True).start()
 
     # Start power calculator
     global power_calculator

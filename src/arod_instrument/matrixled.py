@@ -21,9 +21,9 @@ def displayRectangle():
         draw.rectangle(device.bounding_box, outline="white", fill="white")
 
 
-def displayLetter():
+def displayLetter(letter: str = "A"):
     with canvas(device) as draw:
-        text(draw, (0, 0), "A", fill="white", font=proportional(CP437_FONT))
+        text(draw, (0, 0), letter, fill="white", font=proportional(CP437_FONT))
 
 
 def scrollToDisplayText(my_text: str = "Hello, Nice to meet you!"):
@@ -52,10 +52,10 @@ def arrowDown(move: int = 0, h: int = -1):
             draw.line((7, 7, 7, 7 - h), fill=1)
 
 
-def notMoving(h: int = -1):
+def notMoving(move: int = 0, h: int = -1):
     with canvas(device) as draw:
-        draw.line((0, 2, 4, 2), fill=1)
-        draw.line((0, 4, 4, 4), fill=1)
+        draw.line((0 + move, 2, 4 + move, 2), fill=1)
+        draw.line((0 + move, 4, 4 + move, 4), fill=1)
         if h >= 0:
             draw.line((7, 7, 7, 7 - h), fill=1)
 
@@ -76,11 +76,6 @@ def shutDown():
 
 
 def main():
-    """Execute a sequence of startup, operation, and shutdown commands in a loop.
-    Parameters:
-        None
-    Returns:
-        None"""
     while True:
         # scrollToDisplayText("Welcome to ATHENA-rod")
         startUp()
@@ -100,7 +95,7 @@ def main():
         time.sleep(.5)
 
 
-def destroy():
+def exit_main():
     pass
 
 
@@ -108,4 +103,4 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        destroy()
+        exit_main()

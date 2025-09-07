@@ -15,27 +15,27 @@ from arod_control.authorization import RFID_Authorization, FaceAuthorization
 from arod_control import PORT_CTRL, PORT_STREAM  # Socket settings
 from arod_control.socket_utils import StreamingPacket  # For packet size (now 4 floats)
 
-# Configuration
 FAKE_FACE_AUTH: bool = True  # FAKE face authorization, use for development only!!
-APPROVED_USER_NAMES: list[str] = ['Ondrej Chvala']
+CB_STATE: dict = {  # Control box machine state
+    'auth': {       # Authorization status
+        'face': '',
+        'rfid': '',
+        'disp': False   # Is display computer allowed to connect?
+    },
+    'refresh': {    # Refresh rate for loops [s]
+        'leds':  1,     # LED
+        'display': 1,   # LCD
+        'rfid': 15*60,  # RFID authorization
+        'as_1': 0.1     #
+    },
+    'leds': [9, 9, 9],  # 0 - off, 1 - on, 9 - flashing
+    'message': {
+        'text': '',     # Text to show
+        'timer': 2      # for how long [s]
+    }
+}
 
-# Control box machine state
-CB_STATE: dict = {'auth': {  # Authorization status
-    'face': '', 'rfid': '', 'disp': False  # Is display computer allowed to connect?
-}, 'refresh': {  # Refresh rate for loops [s]
-    'leds': 1,  # LED
-    'display': 1,  # LCD
-    'rfid': 15 * 60,  # RFID authorization
-    'as_1': 0.1  #
-}, 'leds': [9, 9, 9],  # 0 - off, 1 - on, 9 - flashing
-    'message': {'text': '',  # Text to show
-        'timer': 2  # for how long [s]
-    }, 'as_1': {  # Synchronized machine state with actuator/sensor box1
-        'distance': -1.0,  # Ultrasound distance measurement [float]
-        'motor': 0,  # AROD motor down, stop, up [-1, 0, 1]
-        'servo': 0,  # Servo engaging [0, 1]
-        'bswitch': 0  # Bottom switch pressed [0, 1]
-    }}
+APPROVED_USER_NAMES: list[str] = ['Ondrej Chvala']
 
 # LOGGER
 logger = logging.getLogger('ACBox')  # ATHENA rods Control Box
@@ -58,9 +58,17 @@ console_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 # SOCKET communications setup
-connections = {"stream_instr": None, "stream_display": None, "ctrl_instr": None, "ctrl_display": None}
+connections = {
+    "stream_instr": None,
+    "stream_display": None,
+    "ctrl_instr": None,
+    "ctrl_display": None
+}
 connection_lock = threading.Lock()
-servers = {"stream": None, "ctrl": None}
+servers = {
+    "stream": None,
+    "ctrl": None
+}
 stop_event = threading.Event()  # Global event for clean shutdown
 
 
@@ -93,17 +101,13 @@ def accept_stream_connections():
             valid = {"stream_instr", "stream_display"}
             if handshake not in valid:
                 logger.warning(f"Invalid stream handshake '{handshake}' from {addr}, expected one of {sorted(valid)}")
-                # IMPORTANT: do not send any bytes on stream sockets (binary channel)
                 conn.close()
                 continue
 
             if handshake == "stream_display" and not CB_STATE['auth']['disp']:
                 logger.info(f"Rejected {handshake} connection from {addr} due to AUTH=False")
-                # IMPORTANT: close silently; no text on stream channel
                 conn.close()
                 continue
-
-            # IMPORTANT: no 'OK:CONNECTED' on stream sockets (keep channel strictly binary)
 
             with connection_lock:
                 old = connections.get(handshake)
@@ -374,6 +378,19 @@ def run_leds():
     logger.info('LEDs thread initialized')
     while not stop_event.is_set():
         time.sleep(CB_STATE['refresh']['leds'])
+
+        # Set blue and led status
+        global connections
+        if connections["stream_instr"] and connections["ctrl_instr"]:
+            CB_STATE['leds'][2] = 1
+        else:
+            CB_STATE['leds'][2] = 0
+        if connections["stream_display"] and connections["ctrl_display"]:
+            CB_STATE['leds'][0] = 1
+        else:
+            CB_STATE['leds'][0] = 0
+
+        # Set LEDS accordingly
         for i, led_set in enumerate(CB_STATE['leds']):
             if led_set == 1:  # The LEDs are flipped polarity
                 leds.turn_off(i_led=i)
@@ -409,14 +426,6 @@ def run_auth():
     face_auth = FaceAuthorization()
     logger.info('Authorization thread initialized')
 
-    # For development: start already authorized
-    if FAKE_FACE_AUTH:
-        detected_name = APPROVED_USER_NAMES[0]
-        CB_STATE['auth']['face'] = detected_name
-        CB_STATE['auth']['rfid'] = "fake_rfid_tag"
-        CB_STATE['auth']['disp'] = True
-        logger.info(f'FAKE Authorization: authorized user {detected_name}')
-
     while not stop_event.is_set():
         if not CB_STATE['auth']['face']:  # 1. Wait for face authorization
             if not FAKE_FACE_AUTH:
@@ -439,11 +448,6 @@ def run_auth():
 
         logger.info(f"RFID: {CB_STATE['auth']['rfid']}")
         while not CB_STATE['auth']['rfid'] and not stop_event.is_set():  # 2. Wait for RFID authorization
-            if FAKE_FACE_AUTH:
-                CB_STATE['auth']['rfid'] = "fake_rfid_tag"
-                logger.info("FAKE RFID authorization")
-                break
-
             (tag_id, tag_t) = rfid_auth.read_tag()
             logger.debug(f"tag_id, tag_t: {tag_id}, {tag_t}")
             if rfid_auth.auth_tag():

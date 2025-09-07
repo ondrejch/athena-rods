@@ -7,18 +7,78 @@ from gpiozero import DistanceSensor
 from gpiozero import Motor as OriginalMotor
 from gpiozero import AngularServo
 from gpiozero import Button
+import threading
 
 
 class Motor(OriginalMotor):
-    """ Adding methods to move the rod intuitively """
+    """
+    Adding methods to move the rod intuitively and a mechanism
+    to notify other threads of status changes.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.speed: float = 1.0  # Default motor speed
+        self._status: int = 0  # Private status variable, represents direction: 1 (up), -1 (down), 0 (stopped)
+        self.status_cond = threading.Condition()  # Condition variable for status changes
+
+    @property
+    def status(self) -> int:
+        """Returns the current motor status in a thread-safe way."""
+        with self.status_cond:
+            return self._status
+
+    def _set_status(self, new_status: int):
+        """Internal method to set the status and notify all waiting threads."""
+        with self.status_cond:
+            if self._status != new_status:
+                self._status = new_status
+                # Notify all threads that are waiting for the status to change
+                self.status_cond.notify_all()
 
     def up(self):
-        self.backward()
+        """Moves the motor up (backward) and sets status to 1."""
+        self.speed = 1.0
+        self.backward(self.speed)
+        self._set_status(1)
 
     def down(self):
-        self.forward()
+        """Moves the motor down (forward) and sets status to -1."""
+        self.speed = 1.0
+        self.forward(self.speed)
+        self._set_status(-1)
+
+    def stop(self):
+        """Stops the motor and sets status to 0."""
+        super().stop()  # Call the stop method from the parent class to halt movement
+        self._set_status(0)
+
+    def wait_for_status_change(self, stop_event: threading.Event, timeout: float = 0.1) -> (bool, int):
+        """
+        Waits for the motor status to change, while also being responsive to a stop_event.
+        This method is designed to be used by a separate thread.
+
+        Args:
+            stop_event (threading.Event): An event that can terminate the wait.
+            timeout (float): The interval in seconds to wake up and check the stop_event.
+
+        Returns:
+            tuple[bool, int]: A tuple containing:
+                              - A boolean indicating if the status actually changed.
+                              - The new status of the motor.
+        """
+        with self.status_cond:
+            current_status = self._status
+            # Loop until the stop_event is set
+            while not stop_event.is_set():
+                # Wait for a notification or for the timeout to expire
+                self.status_cond.wait(timeout=timeout)
+
+                # If the status has changed since we started waiting, return the new status
+                if self._status != current_status:
+                    return True, self._status
+
+            # If the loop was exited, it means the stop_event was set
+            return False, self._status
 
 
 sonar = DistanceSensor(echo=24, trigger=23)  # Ultrasound sonar to measure distance
