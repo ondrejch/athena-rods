@@ -317,9 +317,7 @@ def matrix_led_driver(cr_reactivity, explosion_event):
     h_max: float = MAX_ROD_DISTANCE
     dh: float = h_max - h_min
     matrix_led_start_up()
-    old_status: int = motor.status
     is_first_run: bool = True
-    logger.debug(f"Thread: {current.name}, ident: {current.ident}")
 
     while not stop_event.is_set():
         # Check for explosion event first, with a short timeout
@@ -353,13 +351,11 @@ def matrix_led_driver(cr_reactivity, explosion_event):
 
         # First time, or if the status actually changed, act on it
         if status_changed:
-            logger.debug(f"Thread: {current.name}, ident: {current.ident}, {is_first_run} {old_status} {status_changed} Motor status: {motor.status}")
             is_first_run = False
             old_status = new_status
             move: int = 0
             while old_status == new_status and not explosion_event.is_set():
-                logger.debug(f"Thread: {current.name}, ident: {current.ident}, *** Motor status: {motor.status}")
-                ih: int = int(7.0 * (cr_reactivity.distance - h_min) / (h_max - h_min))
+                ih: int = int(7.0 * (cr_reactivity.distance - h_min) / dh)
                 if ih < 0:
                     ih = 0
                 if ih > 8:
