@@ -317,7 +317,6 @@ def matrix_led_driver(cr_reactivity, explosion_event):
     h_max: float = MAX_ROD_DISTANCE
     dh: float = h_max - h_min
     matrix_led_start_up()
-    is_first_run: bool = True
 
     while not stop_event.is_set():
         # Check for explosion event first, with a short timeout
@@ -335,21 +334,13 @@ def matrix_led_driver(cr_reactivity, explosion_event):
             if not stop_event.is_set():
                 explosion_event.clear()  # Reset the event
 
-        # Check motor status and if it changed
-        # status_changed, new_status = motor.wait_for_status_change(stop_event, timeout=0.1)
-        # logger.debug(f'motor status: {status_changed},  {new_status}')
-
-        # If the wait was interrupted by the stop_event, exit the loop
-        if stop_event.is_set():
+        if stop_event.is_set():  # If the wait was interrupted by the stop_event, exit the loop
             break
 
-        # First time, or if the status actually changed, act on it
-        # if status_changed or is_first_run:
-        #     is_first_run = False
         new_status = motor.status
         old_status = new_status
 
-        move: int = 0
+        pic_jiggle: int = 0  # Offsets the arrow pictures to indicate movement
         while old_status == new_status and not explosion_event.is_set():
             # logger.debug(f'motor status:  {new_status}')
             ih: int = int(7.0 * (cr_reactivity.distance - h_min) / dh)
@@ -358,22 +349,22 @@ def matrix_led_driver(cr_reactivity, explosion_event):
             if ih > 8:
                 ih = 8
             if motor.status == 0:
-                notMoving(move, ih)
+                notMoving(pic_jiggle, ih)
             elif motor.status == -1:
-                arrowDown(move, ih)
+                arrowDown(pic_jiggle, ih)
             elif motor.status == 1:
-                arrowUp(move, ih)
+                arrowUp(pic_jiggle, ih)
             else:
                 logger.error(f"Motor status: {motor.status}")
 
             stop_event.wait(timeout=0.2)
-            if stop_event.is_set():
+            if stop_event.is_set():  # If the wait was interrupted by the stop_event, exit the loop
                 break
 
-            if move == 0:
-                move = 1
+            if pic_jiggle == 0:
+                pic_jiggle = 1
             else:
-                move = 0
+                pic_jiggle = 0
             new_status = motor.status
 
     matrix_led_shut_down()
