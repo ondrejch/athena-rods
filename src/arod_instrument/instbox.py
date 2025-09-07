@@ -323,23 +323,22 @@ def matrix_led_driver(cr_reactivity, explosion_event):
         # Check for explosion event first, with a short timeout
         if explosion_event.wait(timeout=0.01):
             logger.info("Explosion event triggered, showing animation.")
-            # Increasing size
             for i in range(1, 5):
                 if stop_event.is_set(): break
                 displayRectangle(i, do_fill=True)
-                stop_event.wait(0.15)
-            # Decreasing size
-            for i in range(4, 0, -1):
+                stop_event.wait(0.2)
+            for i in range(1, 5):
                 if stop_event.is_set(): break
-                displayRectangle(i, do_fill=True)
-                stop_event.wait(0.1)
+                displayRectangle(i, do_fill=False)
+                stop_event.wait(0.2)
 
             if not stop_event.is_set():
                 explosion_event.clear()  # Reset the event
 
         # Check motor status and if it changed
         status_changed, new_status = motor.wait_for_status_change(stop_event, timeout=0.1)
-
+        logger.debug(f'motor status: {status_changed},  {new_status}')
+        
         # If the wait was interrupted by the stop_event, exit the loop
         if stop_event.is_set():
             break
