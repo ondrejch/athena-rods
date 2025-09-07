@@ -336,7 +336,6 @@ def matrix_led_driver(cr_reactivity, explosion_event):
 
             if not stop_event.is_set():
                 explosion_event.clear()  # Reset the event
-            continue
 
         # Check motor status and if it changed
         status_changed, new_status = motor.wait_for_status_change(stop_event, timeout=0.1)
@@ -364,7 +363,11 @@ def matrix_led_driver(cr_reactivity, explosion_event):
                     arrowUp(move, ih)
                 else:
                     logger.error(f"Motor status: {motor.status}")
+
                 stop_event.wait(timeout=0.2)
+                if stop_event.is_set():
+                    break
+
                 if move == 0:
                     move = 1
                 else:
