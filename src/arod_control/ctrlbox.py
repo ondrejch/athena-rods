@@ -15,7 +15,7 @@ from arod_control.authorization import RFID_Authorization, FaceAuthorization
 from arod_control import PORT_CTRL, PORT_STREAM  # Socket settings
 from arod_control.socket_utils import StreamingPacket  # For packet size (now 4 floats)
 
-FAKE_FACE_AUTH: bool = True  # FAKE face authorization, use for development only!!
+FAKE_FACE_AUTH: bool = False  # FAKE face authorization, use for development only!!
 CB_STATE: dict = {  # Control box machine state
     'auth': {       # Authorization status
         'face': '',

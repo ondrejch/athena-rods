@@ -63,7 +63,7 @@ Hardware build instructions and models:
 
 Instrument Box (RPi5):
 - Ultrasonic DistanceSensor: trigger BCM 23, echo BCM 24
-- DHT11 temperature/humidity sensor for speed-of-sound calibration (alternatively, RPi5 onboard iio sensors are used)
+- DHT11 temperature/humidity sensor for speed-of-sound calibration
 - DC Motor (H-bridge): forward BCM 17, backward BCM 27, enable BCM 22
 - Limit switch: Button on BCM 20 (immediate motor stop on press)
 - Angular servo: BCM 15 (pulse widths set in code)
@@ -72,7 +72,7 @@ Instrument Box (RPi5):
 Control Box (RPi5):
 - LCD1602 I2C display (auto-detect 0x27/0x3f)
 - 3 status LEDs (GPIOs in src/arod_control/leds.py)
-- Optional RPi camera for face recognition
+- RPi camera for face recognition
 - MFRC522 RFID reader (SPI/I2C per driver variant)
 
 Full hardware details and printable parts are in the hardware/ directory.
@@ -88,7 +88,7 @@ On each Raspberry Pi (or your dev machine where applicable):
 sudo apt update
 sudo apt install -y python3-pip python3-numpy python3-scipy python3-opencv \
     python3-gpiozero python3-smbus lm-sensors \
-    libopenblas0 libatlas-base-dev
+    libopenblas0 libatlas-base-dev libcap-dev
 # Optional for face_recognition (may require cmake, dlib, etc.)
 # sudo apt install -y cmake build-essential
 ```
@@ -97,7 +97,7 @@ sudo apt install -y python3-pip python3-numpy python3-scipy python3-opencv \
 - raspi-config → Interface Options:
   - Enable SPI (for MAX7219 LED and MFRC522 variants)
   - Enable I2C (for LCD1602)
-  - Enable Camera (if using face auth)
+  - Enable Camera (for face auth)
 
 3) Python dependencies:
 ```bash
@@ -125,7 +125,7 @@ Other parameters:
   - MAX_ROD_DISTANCE (default 17.0 cm)
   - SOURCE_STRENGTH for the external neutron source
   - Logging to ATHENA_instrument.log
-  - update_speed_of_sound thread: uses get_dht() to read DHT11 temperature/humidity (or RPi5 iio) and sets sonar.speed_of_sound
+  - update_speed_of_sound thread: uses get_dht() to read DHT11 temperature/humidity and sets sonar.speed_of_sound
 - Control Box: src/arod_control/ctrlbox.py
   - FAKE_FACE_AUTH to bypass camera auth during development
   - APPROVED_USER_NAMES list
