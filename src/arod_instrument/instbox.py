@@ -338,19 +338,15 @@ def matrix_led_driver(cr_reactivity, explosion_event):
                 explosion_event.clear()  # Reset the event
             continue
 
-        if is_first_run:
-            new_status = motor.status
-            status_changed = True
-        else:
-            # Wait for a motor status change, but be interruptible by stop_event
-            status_changed, new_status = motor.wait_for_status_change(stop_event, timeout=0.1)
+        # Check motor status and if it changed
+        status_changed, new_status = motor.wait_for_status_change(stop_event, timeout=0.1)
 
         # If the wait was interrupted by the stop_event, exit the loop
         if stop_event.is_set():
             break
 
         # First time, or if the status actually changed, act on it
-        if status_changed:
+        if status_changed or is_first_run:
             is_first_run = False
             old_status = new_status
             move: int = 0

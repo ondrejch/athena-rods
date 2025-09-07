@@ -8,6 +8,7 @@ from gpiozero import Motor as OriginalMotor
 from gpiozero import AngularServo
 from gpiozero import Button
 import threading
+import time
 
 
 class Motor(OriginalMotor):
@@ -54,31 +55,38 @@ class Motor(OriginalMotor):
 
     def wait_for_status_change(self, stop_event: threading.Event, timeout: float = 0.1) -> (bool, int):
         """
-        Waits for the motor status to change, while also being responsive to a stop_event.
-        This method is designed to be used by a separate thread.
+        Waits for the motor status to change or until the timeout expires.
+        This method is also responsive to a global stop_event.
 
         Args:
             stop_event (threading.Event): An event that can terminate the wait.
-            timeout (float): The interval in seconds to wake up and check the stop_event.
+            timeout (float): The maximum time in seconds to wait for a status change.
 
         Returns:
             tuple[bool, int]: A tuple containing:
-                              - A boolean indicating if the status actually changed.
+                              - A boolean indicating if the status actually changed (True) or if it timed out (False).
                               - The new status of the motor.
         """
         with self.status_cond:
             current_status = self._status
-            # Loop until the stop_event is set
-            while not stop_event.is_set():
-                # Wait for a notification or for the timeout to expire
-                self.status_cond.wait(timeout=timeout)
 
-                # If the status has changed since we started waiting, return the new status
-                if self._status != current_status:
-                    return True, self._status
+            # This is the timestamp when the wait should end
+            end_time = threading.TIMEOUT_MAX if timeout is None else time.monotonic() + timeout
 
-            # If the loop was exited, it means the stop_event was set
-            return False, self._status
+            while self._status == current_status and not stop_event.is_set():
+                # Calculate remaining time to wait
+                remaining_time = None if timeout is None else end_time - time.monotonic()
+
+                # If time is up or stop event is set, break the loop
+                if (remaining_time is not None and remaining_time <= 0) or stop_event.is_set():
+                    break
+
+                # Wait for a status change notification or until the remaining time expires
+                self.status_cond.wait(timeout=remaining_time)
+
+            # After the loop, check if the status changed
+            status_did_change = self._status != current_status
+            return status_did_change, self._status
 
 
 sonar = DistanceSensor(echo=24, trigger=23)  # Ultrasound sonar to measure distance
