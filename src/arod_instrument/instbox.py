@@ -336,42 +336,44 @@ def matrix_led_driver(cr_reactivity, explosion_event):
                 explosion_event.clear()  # Reset the event
 
         # Check motor status and if it changed
-        status_changed, new_status = motor.wait_for_status_change(stop_event, timeout=0.1)
-        logger.debug(f'motor status: {status_changed},  {new_status}')
-        
+        # status_changed, new_status = motor.wait_for_status_change(stop_event, timeout=0.1)
+        # logger.debug(f'motor status: {status_changed},  {new_status}')
+
         # If the wait was interrupted by the stop_event, exit the loop
         if stop_event.is_set():
             break
 
         # First time, or if the status actually changed, act on it
-        if status_changed or is_first_run:
-            is_first_run = False
-            old_status = new_status
-            move: int = 0
-            while old_status == new_status and not explosion_event.is_set():
-                ih: int = int(7.0 * (cr_reactivity.distance - h_min) / dh)
-                if ih < 0:
-                    ih = 0
-                if ih > 8:
-                    ih = 8
-                if motor.status == 0:
-                    notMoving(move, ih)
-                elif motor.status == -1:
-                    arrowDown(move, ih)
-                elif motor.status == 1:
-                    arrowUp(move, ih)
-                else:
-                    logger.error(f"Motor status: {motor.status}")
+        # if status_changed or is_first_run:
+        #     is_first_run = False
+        new_status = motor.status
+        old_status = new_status
 
-                stop_event.wait(timeout=0.2)
-                if stop_event.is_set():
-                    break
+        move: int = 0
+        while old_status == new_status and not explosion_event.is_set():
+            ih: int = int(7.0 * (cr_reactivity.distance - h_min) / dh)
+            if ih < 0:
+                ih = 0
+            if ih > 8:
+                ih = 8
+            if motor.status == 0:
+                notMoving(move, ih)
+            elif motor.status == -1:
+                arrowDown(move, ih)
+            elif motor.status == 1:
+                arrowUp(move, ih)
+            else:
+                logger.error(f"Motor status: {motor.status}")
 
-                if move == 0:
-                    move = 1
-                else:
-                    move = 0
-                new_status = motor.status
+            stop_event.wait(timeout=0.2)
+            if stop_event.is_set():
+                break
+
+            if move == 0:
+                move = 1
+            else:
+                move = 0
+            new_status = motor.status
 
     matrix_led_shut_down()
 
