@@ -17,8 +17,8 @@ from arod_control.socket_utils import SocketManager, StreamingPacket
 # External source for PKE
 SOURCE_STRENGTH: float = 5.0  # Default external neutron source strength when enabled
 
-# Limit on rod extension, 19 cm
-MAX_ROD_DISTANCE: float = 19.0
+# Limit on rod extension, 17 cm
+MAX_ROD_DISTANCE: float = 17.0
 
 # LOGGER
 logger = logging.getLogger('AIBox')  # ATHENA rods Instrumentation Box
@@ -301,6 +301,8 @@ def matrix_led_driver(cr_reactivity, explosion_event):
     h_max: float = MAX_ROD_DISTANCE
     dh: float = h_max - h_min
     matrix_led_start_up()
+    old_status: int = motor.status
+    is_first_run: bool = True
     while not stop_event.is_set():
         # Check for explosion event first, with a short timeout
         if explosion_event.wait(timeout=0.01):
@@ -327,8 +329,10 @@ def matrix_led_driver(cr_reactivity, explosion_event):
         if stop_event.is_set():
             break
 
-        # If the status actually changed, act on it
-        if status_changed:
+        # First time, or if the status actually changed, act on it
+        if status_changed or is_first_run:
+            logger.debug(f"DD {is_first_run} {old_status} {status_changed} Motor status: {motor.status}")
+            is_first_run = False
             old_status = new_status
             move: int = 0
             while old_status == new_status and not explosion_event.is_set():
@@ -346,7 +350,13 @@ def matrix_led_driver(cr_reactivity, explosion_event):
                 else:
                     logger.error(f"Motor status: {motor.status}")
                 stop_event.wait(timeout=0.2)
+                if move == 0:
+                    move = 1
+                else:
+                    move = 0
                 new_status = motor.status
+                logger.debug(f"*** Motor status: {motor.status}")
+
     matrix_led_shut_down()
 
 
@@ -417,6 +427,7 @@ if __name__ == "__main__":
             except Exception as e:
                 logger.warning(f"Error stopping power calculator: {e}")
 
+        time.sleep(0.1)  # wait a little
         # Close sockets with some timeout protection
         try:
             stream_socket.close()
