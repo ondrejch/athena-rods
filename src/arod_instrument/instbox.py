@@ -70,7 +70,26 @@ limit_switch.when_pressed = limit_switch_pressed
 limit_switch.when_released = limit_switch_released
 
 
-def process_ctrl_status(cr_reactivity):
+def rod_protection(cr_reactivity):
+    """ Continuously checks rod distance and stops motor if overextended """
+    while not stop_event.is_set():
+        try:
+            distance = cr_reactivity.distance
+            # Poll the sonar for latest value
+            if hasattr(cr_reactivity, 'get_reactivity'):
+                cr_reactivity.get_reactivity()
+                distance = cr_reactivity.distance
+            if distance >= MAX_ROD_DISTANCE:
+                if motor.status == 1:  # Only stop if trying to extend further
+                    motor.stop()
+                    logger.warning(f"Rod overextended! Motor stopped at {distance:.2f} cm.")
+            stop_event.wait(timeout=0.1)  # Poll every 100ms, interruptible
+        except Exception as e:
+            logger.error(f"Error in rod_protection: {e}")
+            stop_event.wait(timeout=1)
+
+
+def process_ctrl_status():
     """Process control messages from the queue"""
     while not stop_event.is_set():
         try:
@@ -93,11 +112,7 @@ def process_ctrl_status(cr_reactivity):
                     if motor_set == 1:
                         if limit_switch.is_pressed:
                             rod_lift()
-                        # Access distance directly from the reactivity object
-                        if cr_reactivity.distance < MAX_ROD_DISTANCE:
-                            motor.up()
-                        else:
-                            motor.stop()
+                        motor.up()
                     elif motor_set == -1:
                         if not limit_switch.is_pressed:
                             motor.down()
@@ -387,8 +402,11 @@ def main():
     power_calculator = ReactorPowerCalculator(cr_reactivity.get_reactivity, dt=0.05, update_event=update_event, explosion_event=explosion_event)
     power_calculator.start()
 
+    # Start rod protection thread
+    threading.Thread(target=rod_protection, args=(cr_reactivity,), daemon=True).start()
+
     # Start control message processor, passing the state-holding object
-    threading.Thread(target=process_ctrl_status, args=(cr_reactivity,), daemon=True).start()
+    threading.Thread(target=process_ctrl_status, daemon=True).start()
 
     # Start stream sender, passing the state-holding object
     threading.Thread(target=stream_sender, args=(cr_reactivity, update_event), daemon=True).start()
