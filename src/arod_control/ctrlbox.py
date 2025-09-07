@@ -581,7 +581,7 @@ def main_loop():
         while True:
             time.sleep(5)  # Optional: Health check could go here
     except KeyboardInterrupt:
-        logger.info("Keyboard interrupt received, shutting down")
+        logger.info("Threads: threading.active_count()\nKeyboard interrupt received, shutting down")
         stop_event.set()
 
 
