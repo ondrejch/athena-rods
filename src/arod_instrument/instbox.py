@@ -48,6 +48,7 @@ ctrl_socket = SocketManager(CONTROL_IP, PORT_CTRL, "ctrl_instr")
 # Communication queues
 ctrl_status_q = queue.Queue(maxsize=100)  # Limit size to prevent memory issues
 stop_event = threading.Event()
+current = threading.current_thread()
 
 
 def limit_switch_pressed():
@@ -247,7 +248,7 @@ def ctrl_receiver():
 
             if success:
                 if data:  # Only process if we have actual data
-                    logger.debug(f"Received control data: {data}")
+                    # logger.debug(f"Received control data: {data}")
                     # Put in queue for processing by main thread
                     try:
                         ctrl_status_q.put_nowait(data)
@@ -318,6 +319,8 @@ def matrix_led_driver(cr_reactivity, explosion_event):
     matrix_led_start_up()
     old_status: int = motor.status
     is_first_run: bool = True
+    logger.debug(f"Thread: {current.name}, ident: {current.ident}")
+
     while not stop_event.is_set():
         # Check for explosion event first, with a short timeout
         if explosion_event.wait(timeout=0.01):
@@ -338,7 +341,9 @@ def matrix_led_driver(cr_reactivity, explosion_event):
             continue
 
         # Wait for a motor status change, but be interruptible by stop_event
+        logger.debug(f"before Thread: {current.name}, ident: {current.ident}")
         status_changed, new_status = motor.wait_for_status_change(stop_event, timeout=0.1)
+        logger.debug(f"after Thread: {current.name}, ident: {current.ident}")
 
         # If the wait was interrupted by the stop_event, exit the loop
         if stop_event.is_set():
@@ -346,12 +351,13 @@ def matrix_led_driver(cr_reactivity, explosion_event):
 
         # First time, or if the status actually changed, act on it
         if status_changed or is_first_run:
-            logger.debug(f"DD {is_first_run} {old_status} {status_changed} Motor status: {motor.status}")
+            logger.debug(f"Thread: {current.name}, ident: {current.ident}, {is_first_run} {old_status} {status_changed} Motor status: {motor.status}")
             is_first_run = False
             old_status = new_status
             move: int = 0
             while old_status == new_status and not explosion_event.is_set():
-                ih: int = int(8.0 * (cr_reactivity.distance - h_min) / (h_max - h_min))
+                logger.debug(f"Thread: {current.name}, ident: {current.ident}, *** Motor status: {motor.status}")
+                ih: int = int(7.0 * (cr_reactivity.distance - h_min) / (h_max - h_min))
                 if ih < 0:
                     ih = 0
                 if ih > 8:
@@ -370,7 +376,6 @@ def matrix_led_driver(cr_reactivity, explosion_event):
                 else:
                     move = 0
                 new_status = motor.status
-                logger.debug(f"*** Motor status: {motor.status}")
 
     matrix_led_shut_down()
 
