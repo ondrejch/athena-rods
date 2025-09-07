@@ -3,7 +3,8 @@ Automated Teaching Hardware for Explaining Nuclear Absorption Rod(s)
 
 ATHENA-rods is a hands-on teaching platform built around two Raspberry Pi 5 units and a small visualization app. It demonstrates how a reactor’s neutron population responds to control-rod motion using a real-time Point Kinetics Equation (PKE) simulation, live sensors, actuators, and simple displays.
 
-- Instrument Box (RPi5): motor + servo moving a physical “control rod,” ultrasonic distance sensor, limit switch, and an 8×8 MAX7219 LED matrix. It also calibrates the ultrasonic ranging by adjusting the speed of sound using temperature and humidity from a DHT11 sensor (or RPi5 onboard iio sensors), improving distance accuracy in real time.
+- Instrument Box (RPi5): motor + servo moving a physical “control rod,” ultrasonic distance sensor, limit switch, and an 8×8 MAX7219 LED matrix. 
+It also calibrates the ultrasonic ranging by adjusting the speed of sound using temperature and humidity from a DHT11 sensor.
 - Control Box (RPi5): LCD1602 display, status LEDs, camera-based face recognition and RFID authorization.
 - Visualization Box (any computer, or the Control Box): a Dash web app for live plots and sending control commands.
 
@@ -218,7 +219,7 @@ Streamed telemetry (binary) uses StreamingPacket.pack_triplet_plus_time64:
 ## Internals (high-level)
 
 Instrument Box (instbox.py) threads:
-- update_speed_of_sound: samples DHT11 temperature/humidity (or RPi5 iio) and sets sonar speed of sound
+- update_speed_of_sound: samples DHT11 temperature/humidity and sets sonar speed of sound
 - ctrl_receiver: reads JSON from Control Box and enqueues
 - process_ctrl_status: applies motor/servo/source settings
 - rod_protection: polls position and stops motor if distance ≥ MAX_ROD_DISTANCE while moving up
