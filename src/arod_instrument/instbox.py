@@ -351,6 +351,7 @@ def matrix_led_driver(cr_reactivity, explosion_event):
 
         move: int = 0
         while old_status == new_status and not explosion_event.is_set():
+            # logger.debug(f'motor status:  {new_status}')
             ih: int = int(7.0 * (cr_reactivity.distance - h_min) / dh)
             if ih < 0:
                 ih = 0
