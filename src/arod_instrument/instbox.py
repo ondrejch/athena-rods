@@ -255,7 +255,7 @@ def ctrl_receiver():
             stop_event.wait(timeout=1)
 
 
-def stream_sender(reactivity_obj, update_event):
+def stream_sender(cr_reactivity, update_event):
     """Send stream data to control box"""
     global power_calculator
     counter: int = 0
@@ -269,11 +269,11 @@ def stream_sender(reactivity_obj, update_event):
                 neutron_density = power_calculator.current_neutron_density
                 rho = power_calculator.current_rho
                 # Access distance directly from the reactivity object
-                distance = reactivity_obj.distance
+                distance = cr_reactivity.distance
                 ts_ms = time.time() * 1000.0  # milliseconds since epoch (float64)
 
                 if counter % 10 == 0:
-                    logger.info(f"CR pos: {distance:4.1f} cm, rho: {rho:.5f}, N: {neutron_density:.2e}, t_ms: {ts_ms:.1f}")
+                    logger.info(f"CR pos: {distance:4.1f} cm, rho: {1e5*rho:.0f} pcm, N: {neutron_density:.2e}, t: {ts_ms:.1f} ms")
                 counter += 1
 
                 # Pack and send the data (3x float32 + 1x float64 timestamp in ms)
