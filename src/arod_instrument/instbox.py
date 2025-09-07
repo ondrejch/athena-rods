@@ -291,9 +291,9 @@ def stream_sender(cr_reactivity, update_event):
             stop_event.wait(timeout=1)
 
 
-def matrix_led_driver(cr_reactivity):
+def matrix_led_driver(cr_reactivity, explosion_event):
     """ Driver for matrix LED display; both motor and stop_event are global scope """
-    from matrixled import arrowUp, arrowDown, notMoving
+    from matrixled import arrowUp, arrowDown, notMoving, displayRectangle
     from matrixled import startUp as matrix_led_start_up
     from matrixled import ledsOff as matrix_led_shut_down
     logger.info("Matrix LED display thread started")
@@ -302,8 +302,26 @@ def matrix_led_driver(cr_reactivity):
     dh: float = h_max - h_min
     matrix_led_start_up()
     while not stop_event.is_set():
-        # Wait for a change, but be interruptible by stop_event
-        status_changed, new_status = motor.wait_for_status_change(stop_event)
+        # Check for explosion event first, with a short timeout
+        if explosion_event.wait(timeout=0.01):
+            logger.info("Explosion event triggered, showing animation.")
+            # Increasing size
+            for i in range(1, 5):
+                if stop_event.is_set(): break
+                displayRectangle(i, do_fill=True)
+                stop_event.wait(0.15)
+            # Decreasing size
+            for i in range(4, 0, -1):
+                if stop_event.is_set(): break
+                displayRectangle(i, do_fill=True)
+                stop_event.wait(0.1)
+
+            if not stop_event.is_set():
+                explosion_event.clear()  # Reset the event
+            continue
+
+        # Wait for a motor status change, but be interruptible by stop_event
+        status_changed, new_status = motor.wait_for_status_change(stop_event, timeout=0.1)
 
         # If the wait was interrupted by the stop_event, exit the loop
         if stop_event.is_set():
@@ -313,7 +331,7 @@ def matrix_led_driver(cr_reactivity):
         if status_changed:
             old_status = new_status
             move: int = 0
-            while old_status == new_status:
+            while old_status == new_status and not explosion_event.is_set():
                 ih: int = int(8.0 * (cr_reactivity.distance - h_min) / (h_max - h_min))
                 if ih < 0:
                     ih = 0
@@ -349,13 +367,14 @@ def main():
     # Initialize reactivity calculation - this object now holds the state
     cr_reactivity = Reactivity()
     update_event = threading.Event()
+    explosion_event = threading.Event()
 
     # Start matrix LED thread
-    threading.Thread(target=matrix_led_driver, args=(cr_reactivity,), daemon=True).start()
+    threading.Thread(target=matrix_led_driver, args=(cr_reactivity, explosion_event), daemon=True).start()
 
     # Start power calculator
     global power_calculator
-    power_calculator = ReactorPowerCalculator(cr_reactivity.get_reactivity, dt=0.05, update_event=update_event)
+    power_calculator = ReactorPowerCalculator(cr_reactivity.get_reactivity, dt=0.05, update_event=update_event, explosion_event=explosion_event)
     power_calculator.start()
 
     # Start control message processor, passing the state-holding object

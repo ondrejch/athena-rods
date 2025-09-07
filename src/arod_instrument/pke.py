@@ -20,7 +20,7 @@ class ReactorPowerCalculator(threading.Thread):
         - Simulation calculates neutron density over the specified time, dependent on reactor reactivity.
         - Results are stored as time, reactivity, and neutron density.
         - Maintains real-time pacing by sleeping for the precise required duration. """
-    def __init__(self, get_reactivity, dt=0.1, duration=None, update_event=None):
+    def __init__(self, get_reactivity, dt=0.1, duration=None, update_event=None, explosion_event=None):
         """Initializes an instance of a class to manage reactor kinetics simulation.
         Parameters:
             - get_reactivity (callable): A function that returns the reactivity at a given time.
@@ -33,6 +33,7 @@ class ReactorPowerCalculator(threading.Thread):
         self.dt = dt
         self.duration = duration
         self.stop_event = threading.Event()
+        self.explosion_event = explosion_event
         self.results = []  # To store time, reactivity, power
         # Initialize solver with dummy reactivity function; will update each step
         self.source_strength: float = 0.0  # Added source strength parameter
@@ -100,6 +101,8 @@ class ReactorPowerCalculator(threading.Thread):
             # print("STATE: ", state)
             if state[0] > self.MAX_REACTOR_POWER:
                 print(" *** POWER OVER 1e30, your reactor exploded! Resetting reactor kinetics. *** ")
+                if self.explosion_event:
+                    self.explosion_event.set()
                 n0 = 1.0
                 C0 = beta / (lambda_ * Lambda) * n0
                 state = np.concatenate(([n0], C0))

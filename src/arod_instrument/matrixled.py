@@ -16,9 +16,15 @@ virtual = viewport(device, width=200, height=400)
 device.clear()  # Turns off all LEDs
 
 
-def displayRectangle():
+def displayRectangle(a: int, do_fill: bool = True):
+    """ Draw a rectangle [-a, a] [-a, a] """
+    assert 1 <= a <= 4
+    if do_fill:
+        fill_str: str = "white"
+    else:
+        fill_str: str = "black"
     with canvas(device) as draw:
-        draw.rectangle(device.bounding_box, outline="white", fill="white")
+        draw.rectangle((4 - a, 4 - a, 3 + a, 3 + a), outline="white", fill=fill_str)
 
 
 def displayLetter(letter: str = "A"):
