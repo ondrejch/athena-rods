@@ -535,13 +535,14 @@ def setup_socket_servers():
         # If SSL is enabled, wrap the servers in SSL context
         if USE_SSL:
             try:
-                # Create SSL context
+                # Create SSL context that requires client certificates
                 ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
                 ssl_context.verify_mode = ssl.CERT_REQUIRED
 
-                # Load certificates
+                # Load server's certificate and private key
                 ssl_context.load_cert_chain(certfile=os.path.join(CERT_DIR, "server.crt"),
                                             keyfile=os.path.join(CERT_DIR, "server.key"))
+                # Load CA certificate to verify clients against
                 ssl_context.load_verify_locations(cafile=os.path.join(CERT_DIR, "ca.crt"))
 
                 # Store the raw servers and the SSL context for use during accept

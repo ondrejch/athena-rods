@@ -75,15 +75,17 @@ class SocketManager:
                 )
             else:
                 # Client configuration
-                # Load client certificate and key
                 client_cert = os.path.join(self.cert_dir, f"{self.handshake}.crt")
                 client_key = os.path.join(self.cert_dir, f"{self.handshake}.key")
 
-                if os.path.exists(client_cert) and os.path.exists(client_key):
-                    self.ssl_context.load_cert_chain(
-                        certfile=client_cert,
-                        keyfile=client_key
-                    )
+                # Ensure certificates exist before proceeding
+                if not os.path.exists(client_cert) or not os.path.exists(client_key):
+                    raise FileNotFoundError(f"Client certificate '{client_cert}' or key '{client_key}' not found.")
+
+                self.ssl_context.load_cert_chain(
+                    certfile=client_cert,
+                    keyfile=client_key
+                )
 
                 # Load CA certificate for server verification
                 self.ssl_context.load_verify_locations(
@@ -97,6 +99,7 @@ class SocketManager:
         except Exception as e:
             logger.error(f"Error initializing SSL context: {e}")
             self.ssl_context = None
+            raise  # Re-raise the exception to prevent the application from starting with a broken config
 
     def connect(self, timeout: float = 10.0) -> bool:
         """Connect to the server with timeout
