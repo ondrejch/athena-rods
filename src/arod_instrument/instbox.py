@@ -26,25 +26,9 @@ SOURCE_STRENGTH: float = 5.0  # Default external neutron source strength when en
 MAX_ROD_DISTANCE: float = 17.0
 
 # LOGGER
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    handlers=[logging.FileHandler("ATHENA_instrument.log"), logging.StreamHandler()])
 logger = logging.getLogger('AIBox')  # ATHENA rods Instrumentation Box
-logger.setLevel(logging.DEBUG)
-
-# Formatter for logging messages
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-# File handler logs DEBUG and above
-file_handler = logging.FileHandler('ATHENA_instrument.log')
-file_handler.setLevel(logging.DEBUG)
-file_handler.setFormatter(formatter)
-
-# Console handler logs INFO and above
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-console_handler.setFormatter(formatter)
-
-# Add handlers to logger
-logger.addHandler(file_handler)
-logger.addHandler(console_handler)
 
 # Initialize socket connections with SSL support
 stream_socket = SocketManager(

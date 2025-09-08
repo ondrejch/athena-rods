@@ -41,25 +41,10 @@ CB_STATE: dict = {  # Control box machine state
 APPROVED_USER_NAMES: list[str] = ['Ondrej Chvala']
 
 # LOGGER
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    handlers=[logging.FileHandler("ATHENA_controller.log"), logging.StreamHandler()])
 logger = logging.getLogger('ACBox')  # ATHENA rods Control Box
-logger.setLevel(logging.DEBUG)
 
-# Formatter for logging messages
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-# File handler logs DEBUG and above
-file_handler = logging.FileHandler('ATHENA_controller.log')
-file_handler.setLevel(logging.DEBUG)
-file_handler.setFormatter(formatter)
-
-# Console handler logs INFO and above
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.DEBUG)
-console_handler.setFormatter(formatter)
-
-# Add handlers to logger
-logger.addHandler(file_handler)
-logger.addHandler(console_handler)
 # SOCKET communications setup
 connections = {
     "stream_instr": None,
