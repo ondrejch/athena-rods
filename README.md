@@ -35,9 +35,9 @@ athena-rods/
 │  ├─ arod_visual/
 │  │  └─ visbox.py                   # Dash app for live plots and controls
 │  └─ mfrc522/                       # Local MFRC522 driver (for RFID)
-├─ requirements.txt
-├─ setup.py                          # Python packaging (src layout)
-├─ setup.sh                          # Optional system setup script (RPi)
+├─ setup_rpi.py                      # Packaging script for Raspberry Pi
+├─ setup_vis.py                      # Packaging script for Visualization client
+├─ build.sh                          # Build script for creating Debian packages
 └─ LICENSE
 ```
 
@@ -81,6 +81,30 @@ Full hardware details and printable parts are in the hardware/ directory.
 ---
 
 ## Installation
+
+The recommended way to install is by using the pre-built Debian (`.deb`) packages from the [GitHub Releases page](https://github.com/ondrejch/athena-rods/releases).
+
+#### For Raspberry Pi (Control & Instrument Boxes)
+
+1.  Download the `python3-athena-rods-rpi_..._all.deb` file from the latest release.
+2.  Install the package using `apt`, which will also handle system dependencies:
+    ```bash
+    # Example for version 0.1.2
+    sudo apt install ./python3-athena-rods-rpi_0.1.2-1_all.deb
+    ```
+3.  Enable required hardware interfaces using `sudo raspi-config`:
+    - **Interface Options**: Enable SPI, I2C, and Camera.
+
+#### For the Visualization Box (Ubuntu/Debian `x86_64`)
+
+1.  Download the `python3-athena-rods-vis_..._all.deb` file from the latest release.
+2.  Install the package:
+    ```bash
+    # Example for version 0.1.2
+    sudo apt install ./python3-athena-rods-vis_0.1.2-1_all.deb
+    ```
+
+### Alternative manual installation 
 
 On each Raspberry Pi (or your dev machine where applicable):
 
