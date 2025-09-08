@@ -90,8 +90,8 @@ class SocketManager:
                     cafile=os.path.join(self.cert_dir, "ca.crt")
                 )
 
-                # Check hostname (for clients)
-                self.ssl_context.check_hostname = True
+                # Do not check hostname for IP addresses in local network
+                self.ssl_context.check_hostname = False
 
             logger.info("SSL context initialized successfully")
         except Exception as e:
