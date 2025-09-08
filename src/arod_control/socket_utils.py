@@ -20,6 +20,7 @@ logger.setLevel(logging.INFO)  # Ensure we're capturing appropriate log level
 
 class SocketManager:
     """Manager for socket connections with reconnection capabilities and SSL/TLS support"""
+
     def __init__(self, host: str, port: int, handshake: str, use_ssl: bool = True,
                  cert_dir: str = os.path.join(os.path.expanduser('~'), "%s/certs" % AUTH_ETC_PATH),
                  server_mode: bool = False):
@@ -58,48 +59,49 @@ class SocketManager:
         try:
             # Create SSL context with modern security settings
             self.ssl_context = ssl.create_default_context(
-                ssl.Purpose.SERVER_AUTH if not self.server_mode else ssl.Purpose.CLIENT_AUTH
-            )
+                ssl.Purpose.SERVER_AUTH if not self.server_mode else ssl.Purpose.CLIENT_AUTH)
 
             # Server and client setup differ
             if self.server_mode:
                 # Server needs certificate and private key
                 self.ssl_context.verify_mode = ssl.CERT_REQUIRED
-                self.ssl_context.load_cert_chain(
-                    certfile=os.path.join(self.cert_dir, "server.crt"),
-                    keyfile=os.path.join(self.cert_dir, "server.key")
-                )
+                self.ssl_context.load_cert_chain(certfile=os.path.join(self.cert_dir, "server.crt"),
+                    keyfile=os.path.join(self.cert_dir, "server.key"))
                 # Load CA certificate to verify client certificates
-                self.ssl_context.load_verify_locations(
-                    cafile=os.path.join(self.cert_dir, "ca.crt")
-                )
+                self.ssl_context.load_verify_locations(cafile=os.path.join(self.cert_dir, "ca.crt"))
             else:
                 # Client configuration
-                client_cert = os.path.join(self.cert_dir, f"{self.handshake}.crt")
-                client_key = os.path.join(self.cert_dir, f"{self.handshake}.key")
+                # Determine client certificate name from handshake
+                if "instr" in self.handshake:
+                    client_name = "instbox"
+                elif "display" in self.handshake:
+                    client_name = "visbox"
+                else:
+                    # Fallback for other potential clients, though not currently used
+                    client_name = self.handshake
 
-                # Ensure certificates exist before proceeding
-                if not os.path.exists(client_cert) or not os.path.exists(client_key):
-                    raise FileNotFoundError(f"Client certificate '{client_cert}' or key '{client_key}' not found.")
+                logger.info(f"Loading client certificate for '{client_name}' based on handshake '{self.handshake}'")
 
-                self.ssl_context.load_cert_chain(
-                    certfile=client_cert,
-                    keyfile=client_key
-                )
+                # Load client certificate and key
+                client_cert = os.path.join(self.cert_dir, f"{client_name}.crt")
+                client_key = os.path.join(self.cert_dir, f"{client_name}.key")
+
+                if os.path.exists(client_cert) and os.path.exists(client_key):
+                    self.ssl_context.load_cert_chain(certfile=client_cert, keyfile=client_key)
+                else:
+                    logger.error(
+                        f"Client certificate or key not found: {client_cert} / {client_key}")  # This will likely cause a connection failure, which is appropriate
 
                 # Load CA certificate for server verification
-                self.ssl_context.load_verify_locations(
-                    cafile=os.path.join(self.cert_dir, "ca.crt")
-                )
+                self.ssl_context.load_verify_locations(cafile=os.path.join(self.cert_dir, "ca.crt"))
 
-                # Do not check hostname for IP addresses in local network
-                self.ssl_context.check_hostname = False
+                # Check hostname (for clients)
+                self.ssl_context.check_hostname = True
 
             logger.info("SSL context initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing SSL context: {e}")
             self.ssl_context = None
-            raise  # Re-raise the exception to prevent the application from starting with a broken config
 
     def connect(self, timeout: float = 10.0) -> bool:
         """Connect to the server with timeout
@@ -138,10 +140,8 @@ class SocketManager:
 
                 if self.use_ssl and self.ssl_context:
                     try:
-                        self.socket = self.ssl_context.wrap_socket(
-                            plain_socket,
-                            server_hostname=self.host if not self.server_mode else None
-                        )
+                        self.socket = self.ssl_context.wrap_socket(plain_socket,
+                            server_hostname=self.host if not self.server_mode else None)
                         logger.info(f"SSL handshake completed - Cipher: {self.socket.cipher()}")
                     except ssl.SSLError as ssl_err:
                         logger.error(f"SSL handshake failed: {ssl_err}")
@@ -426,9 +426,9 @@ class StreamingPacket:
     """Helpers for streaming binary packets."""
 
     # Sizes for packet formats
-    PACKET_SIZE_TRIPLET = 12   # 3 x float32
-    PACKET_SIZE_QUAD = 16      # 4 x float32
-    PACKET_SIZE_TIME64 = 20    # 3 x float32 + 1 x float64 (timestamp ms)
+    PACKET_SIZE_TRIPLET = 12  # 3 x float32
+    PACKET_SIZE_QUAD = 16  # 4 x float32
+    PACKET_SIZE_TIME64 = 20  # 3 x float32 + 1 x float64 (timestamp ms)
 
     @staticmethod
     def pack_float_triplet(val1: float, val2: float, val3: float) -> bytes:
