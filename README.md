@@ -117,61 +117,76 @@ sudo ./setup.sh
 
 ## Configuration
 
-Socket endpoints are defined in arod_control/__init__.py:
-- CONTROL_IP: IP address of the Control Box (hub/server)
-- PORT_STREAM and PORT_CTRL: stream/control TCP ports
+Socket endpoints are defined in `src/arod_control/__init__.py`:
+- `CONTROL_IP`: IP address of the Control Box (hub/server).
+- `PORT_STREAM` and `PORT_CTRL`: Stream and control TCP ports.
+- `USE_SSL`: Set to `True` to enable SSL/TLS encryption for all sockets.
 
 Other parameters:
-- Instrument Box: src/arod_instrument/instbox.py
-  - MAX_ROD_DISTANCE (default 17.0 cm)
-  - SOURCE_STRENGTH for the external neutron source
-  - Logging to ATHENA_instrument.log
-  - update_speed_of_sound thread: uses get_dht() to read DHT11 temperature/humidity and sets sonar.speed_of_sound
-- Control Box: src/arod_control/ctrlbox.py
-  - FAKE_FACE_AUTH to bypass camera auth during development
-  - APPROVED_USER_NAMES list
-  - Logging to ATHENA_controller.log
-- Visualization Box: src/arod_visual/visbox.py
-  - Dash server default: http://127.0.0.1:8050, logs to visbox.log
+- Instrument Box: `src/arod_instrument/instbox.py`
+  - `MAX_ROD_DISTANCE` (default 17.0 cm)
+  - `SOURCE_STRENGTH` for the external neutron source
+  - Logging to `ATHENA_instrument.log`
+  - `update_speed_of_sound` thread: uses `get_dht()` to read DHT11 temperature/humidity and sets `sonar.speed_of_sound`
+- Control Box: `src/arod_control/ctrlbox.py`
+  - `FAKE_FACE_AUTH` to bypass camera auth during development
+  - `APPROVED_USER_NAMES` list
+  - Logging to `ATHENA_controller.log`
+- Visualization Box: `src/arod_visual/visbox.py`
+  - Dash server default: http://127.0.0.1:8050, logs to `visbox.log`
 
 Authorization assets:
-- Face encodings pickle expected at ~/app/etc/face_rec_encodings.pickle
-- CA chain fingerprint text at ~/app/etc/ca-chain.txt
-- MFRC522 storage and block map handled in authorization.py
+- Face encodings pickle expected at `~/git/athena_rods/etc/face_rec_encodings.pickle`
+- SSL certificates expected in `~/git/athena_rods/etc/certs/`
+- MFRC522 storage and block map handled in `authorization.py`
 
 ---
 
-## Authorization and security (RFID + CA certificate fingerprint)
+## Authorization and Security
 
-Two-factor authorization checks user's identity via face scanning, and the content of RFID tag. 
-RFID authorization is implemented in src/arod_control/authorization.py. 
-It uses a “something you have” (the RFID tag) tied to a secret derived from a CA certificate fingerprint. The design avoids storing plain tag IDs or shared secrets on the tag.
+The system employs two layers of security: authorization for operators and encryption for network traffic.
 
-- Fingerprint source:
-  - File: ~/app/etc/ca-chain.txt
+### Operator Authorization (Face + RFID)
+
+Two-factor authorization checks the user's identity via face scanning and the content of an RFID tag. This is implemented in `src/arod_control/authorization.py`. It uses a “something you have” (the RFID tag) tied to a secret derived from a CA certificate fingerprint. The design avoids storing plain tag IDs or shared secrets on the tag.
+
+- **Fingerprint source**:
+  - File: `~/git/athena_rods/etc/ca-chain.txt`
   - Content: a colon-separated hex fingerprint (e.g., from an X.509 CA certificate), parsed as a big-endian integer.
 
-- Deriving the tag’s expected data:
-  1) Read numeric tag_id from the MFRC522 reader.
-  2) Compute n = int(tag_id) × fp, where fp is the CA fingerprint integer.
-     - The code asserts there is no overflow: n / fp == int(tag_id).
-  3) Convert n to bytes (big-endian), hash with SHA3-512, and take the hex digest (128 hex chars).
+- **Deriving the tag’s expected data**:
+  1) Read numeric `tag_id` from the MFRC522 reader.
+  2) Compute `n = int(tag_id) × fp`, where `fp` is the CA fingerprint integer.
+     - The code asserts there is no overflow: `n / fp == int(tag_id)`.
+  3) Convert `n` to bytes (big-endian), hash with SHA3-512, and take the hex digest (128 hex chars).
   4) This 128-character hex digest is the “expected” content to be stored/read from the RFID tag.
 
-- Storage format on the RFID tag:
-  - Uses StoreMFRC522 with a reduced block map for faster IO:
-    - BLOCK_ADDRESSES = { 7: [4,5,6], 11: [8,9,10], 15: [12,13,14] }
-    - Total 9 data blocks × 16 bytes = 144 bytes capacity
-    - Enough to store the 128-byte ASCII hex digest (plus padding/newline if present)
-  - Only data blocks are written; sector trailer blocks are not modified by this code.
+- **Security properties**:
+  - The secret (`fp`) never leaves the Control Box filesystem; tags only hold the digest.
+  - Rotating the CA certificate (changing `fp`) invalidates all previously written tags. Re-provision tags by running `write_tag()` again with the new `fp`.
+  - Keep `~/git/athena_rods/etc/ca-chain.txt` restricted (e.g., mode 600).
 
-- Security properties and considerations:
-  - The secret (fp) never leaves the Control Box filesystem; tags only hold the digest.
-  - If an attacker clones a tag bit-for-bit, it will still authenticate; however, without fp they cannot produce valid digests for other tag IDs.
-  - Rotating the CA certificate (changing fp) invalidates all previously written tags at once. Re-provision tags by running write_tag() again with the new fp.
-  - Keep ~/app/etc/ca-chain.txt restricted (e.g., mode 600). Treat fp as sensitive material.
-  - The tag_id is not secret; security relies on the secrecy of fp and the unforgeability of SHA3-512 preimages.
-  - FACE + RFID can be combined: face auth gates UI access; RFID provides possession factor.
+### Network Encryption (SSL/TLS)
+
+All TCP socket communication between the Control Box, Instrument Box, and Visualization Box is encrypted using mutual SSL/TLS (mTLS). This ensures that data is secure and that only authorized clients can connect to the control hub.
+
+- **How it works**:
+  - The Control Box acts as the TLS server.
+  - The Instrument Box and Visualization Box act as TLS clients.
+  - The server requires and verifies a client certificate, and clients verify the server's certificate against a shared Certificate Authority (CA).
+  - This is enabled by default via the `USE_SSL = True` flag in `src/arod_control/__init__.py`.
+
+- **Certificate Generation**:
+  - A helper script, `generate_ssl_certs.py`, is provided to create the necessary X.509 certificates.
+  - This script must be run once to generate:
+    - `ca.crt`: The Certificate Authority certificate.
+    - `server.crt` & `server.key`: For the Control Box (server).
+    - `instbox.crt` & `instbox.key`: For the Instrument Box client.
+    - `visbox.crt` & `visbox.key`: For the Visualization Box client.
+  - These certificates are placed in `~/git/athena_rods/etc/certs/`.
+
+- **Client Certificate Loading**:
+  - The client-side `SocketManager` automatically loads the correct certificate (`instbox.crt` or `visbox.crt`) based on the handshake string provided during initialization (e.g., `stream_instr` for the instrument box).
   
 ---
 
@@ -209,7 +224,7 @@ Control messages (JSON, line-delimited over ctrl socket):
 }
 ```
 
-Streamed telemetry (binary) uses StreamingPacket.pack_triplet_plus_time64:
+Streamed telemetry (binary) uses `StreamingPacket.pack_triplet_plus_time64`:
 - 3 × float32: neutron_density, rho, distance
 - 1 × float64: timestamp (milliseconds since epoch)
 - Big-endian, total 20 bytes
@@ -219,39 +234,39 @@ Streamed telemetry (binary) uses StreamingPacket.pack_triplet_plus_time64:
 ## Internals (high-level)
 
 Instrument Box (instbox.py) threads:
-- update_speed_of_sound: samples DHT11 temperature/humidity and sets sonar speed of sound
-- ctrl_receiver: reads JSON from Control Box and enqueues
-- process_ctrl_status: applies motor/servo/source settings
-- rod_protection: polls position and stops motor if distance ≥ MAX_ROD_DISTANCE while moving up
-- ReactorPowerCalculator: real-time PKE integration
-  - Sets explosion_event if power > threshold and resets state
-- stream_sender: periodically sends latest neutron/rho/position/timestamp
-- matrix_led_driver: shows arrows/height bar; runs explosion rectangle animation when explosion_event is set
+- `update_speed_of_sound`: samples DHT11 temperature/humidity and sets sonar speed of sound
+- `ctrl_receiver`: reads JSON from Control Box and enqueues
+- `process_ctrl_status`: applies motor/servo/source settings
+- `rod_protection`: polls position and stops motor if distance ≥ `MAX_ROD_DISTANCE` while moving up
+- `ReactorPowerCalculator`: real-time PKE integration
+  - Sets `explosion_event` if power > threshold and resets state
+- `stream_sender`: periodically sends latest neutron/rho/position/timestamp
+- `matrix_led_driver`: shows arrows/height bar; runs explosion rectangle animation when `explosion_event` is set
 
 Key synchronization:
-- stop_event: global shutdown for all threads
-- update_event: signals new PKE data to stream_sender
-- explosion_event: signals the LED animation and PKE reset
+- `stop_event`: global shutdown for all threads
+- `update_event`: signals new PKE data to `stream_sender`
+- `explosion_event`: signals the LED animation and PKE reset
 
 Motor status notifications:
-- Motor subclass (devices.Motor) uses a threading.Condition to publish status changes.
-- wait_for_status_change(stop_event, timeout) returns when status changes or when the timeout expires.
+- `Motor` subclass (`devices.Motor`) uses a `threading.Condition` to publish status changes.
+- `wait_for_status_change(stop_event, timeout)` returns when status changes or when the timeout expires.
 
 Safety:
-- Immediate motor.stop() on limit switch press
-- Independent rod_protection watchdog
+- Immediate `motor.stop()` on limit switch press
+- Independent `rod_protection` watchdog
 - Clean shutdown paths for sockets and threads
 
 ---
 
 ## Examples
 
-- examples/face_auth: scripts to capture faces and train encodings
-- examples/arod_control/rfid_read.py: RFID basics
-- examples/arod_instrument: stand-alone LED matrix and DHT demos
-- examples/mfrc522: read/write/dump tag examples
+- `examples/face_auth`: scripts to capture faces and train encodings
+- `examples/arod_control/rfid_read.py`: RFID basics
+- `examples/arod_instrument`: stand-alone LED matrix and DHT demos
+- `examples/mfrc522`: read/write/dump tag examples
 
-Run examples directly with python3 from the repository root.
+Run examples directly with `python3` from the repository root.
 
 ---
 
@@ -263,13 +278,13 @@ pip3 install -e .
 ```
 
 Logging:
-- Instrument: ATHENA_instrument.log (in src/arod_instrument/)
-- Control: ATHENA_controller.log
-- Visual: visbox.log
+- Instrument: `ATHENA_instrument.log` (in `src/arod_instrument/`)
+- Control: `ATHENA_controller.log`
+- Visual: `visbox.log`
 
 Contributions welcome:
 - Keep code thread-safe (prefer Events/Conditions over long sleeps).
-- Make timeouts interruptible with stop_event.wait().
+- Make timeouts interruptible with `stop_event.wait()`.
 - Add clear logging and comments.
 
 ---
