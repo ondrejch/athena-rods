@@ -15,6 +15,7 @@ setup(
     long_description_content_type='text/markdown',
     author="Ondrej Chvala",
     author_email="ochvala@utexas.edu",
+    license="MIT",
     packages=find_packages(where="src", include=['arod_visual', 'arod_control']),
     package_dir={"": "src"},
     install_requires=[
@@ -25,7 +26,6 @@ setup(
     ],
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
         "Framework :: Dash",
     ],
