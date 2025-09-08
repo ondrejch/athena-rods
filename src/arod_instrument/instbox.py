@@ -7,12 +7,17 @@ Ondrej Chvala <ochvala@utexas.edu>
 import logging
 import queue
 import time
-import json
 import threading
+import os
+import ssl
 from arod_control import PORT_CTRL, PORT_STREAM, CONTROL_IP
 from devices import get_dht, get_distance, speed_of_sound, motor, sonar, rod_engage, rod_scram, limit_switch
 from pke import ReactorPowerCalculator
 from arod_control.socket_utils import SocketManager, StreamingPacket
+from arod_control import USE_SSL, AUTH_ETC_PATH
+
+# Where the SSL certificates are
+CERT_DIR: str = os.path.join(os.path.expanduser("~"), AUTH_ETC_PATH, "certs")
 
 # External source for PKE
 SOURCE_STRENGTH: float = 5.0  # Default external neutron source strength when enabled
@@ -41,9 +46,15 @@ console_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
-# Sockets
-stream_socket = SocketManager(CONTROL_IP, PORT_STREAM, "stream_instr")
-ctrl_socket = SocketManager(CONTROL_IP, PORT_CTRL, "ctrl_instr")
+# Initialize socket connections with SSL support
+stream_socket = SocketManager(
+    CONTROL_IP, PORT_STREAM, "stream_instr",
+    use_ssl=USE_SSL, cert_dir=CERT_DIR
+)
+ctrl_socket = SocketManager(
+    CONTROL_IP, PORT_CTRL, "ctrl_instr",
+    use_ssl=USE_SSL, cert_dir=CERT_DIR
+)
 
 # Communication queues
 ctrl_status_q = queue.Queue(maxsize=100)  # Limit size to prevent memory issues

@@ -11,13 +11,14 @@ import face_recognition
 import pickle
 from picamera2 import Picamera2
 from mfrc522 import StoreMFRC522
+from arod_control import AUTH_ETC_PATH
 
 
 class FaceAuthorization:
     """ Face recognition using RPi5 camera """
     def __init__(self):
         # Load known faces' embeddings
-        with open(os.path.join(os.path.expanduser('~'), 'app/etc/face_rec_encodings.pickle'), 'rb') as f:
+        with open(os.path.join(os.path.expanduser('~'), '%s/face_rec_encodings.pickle' % AUTH_ETC_PATH), 'rb') as f:
             self.data = pickle.load(f)
         # Start RPi5 camera
         self.picam2 = Picamera2()
@@ -68,7 +69,7 @@ class RFID_Authorization:
             None
         Returns:
             None"""
-        with open(os.path.join(os.path.expanduser('~'), "app/etc/ca-chain.txt"), "r") as f:
+        with open(os.path.join(os.path.expanduser('~'), "%s/ca-chain.txt" % AUTH_ETC_PATH), "r") as f:
             text = f.read()
         self.fp = int(text.replace(':', ''), 16)  # Convert base-16 to integer
 

@@ -9,13 +9,16 @@ import threading
 import time
 import socket
 import json
+import os
+import ssl
 from arod_control.leds import LEDs
 from arod_control.display import Display
 from arod_control.authorization import RFID_Authorization, FaceAuthorization
-from arod_control import PORT_CTRL, PORT_STREAM  # Socket settings
+from arod_control import USE_SSL, AUTH_ETC_PATH, PORT_CTRL, PORT_STREAM  # Socket settings
 from arod_control.socket_utils import StreamingPacket  # For packet size (now 4 floats)
 
-FAKE_FACE_AUTH: bool = False  # FAKE face authorization, use for development only!!
+CERT_DIR: str = os.path.join(os.path.expanduser("~"), AUTH_ETC_PATH, "certs")  # Where the SSL certificates are
+FAKE_FACE_AUTH: bool = True  # FAKE face authorization, use for development only!!
 CB_STATE: dict = {  # Control box machine state
     'auth': {       # Authorization status
         'face': '',
@@ -74,13 +77,30 @@ stop_event = threading.Event()  # Global event for clean shutdown
 
 def accept_stream_connections():
     """Accept connections on the stream server and route them based on handshake"""
-    server = servers["stream"]
+    server_info = servers["stream"]
+    server = server_info["socket"] if isinstance(server_info, dict) else server_info
+    ssl_context = server_info.get("context") if isinstance(server_info, dict) else None
+
     server.settimeout(1.0)
 
     while not stop_event.is_set():
         try:
             conn, addr = server.accept()
+            logger.info(f"Incoming stream connection from {addr}")
+
+            # Wrap socket with SSL if enabled
+            if ssl_context:
+                try:
+                    conn = ssl_context.wrap_socket(conn, server_side=True)
+                    logger.info(f"SSL handshake completed with {addr} - Cipher: {conn.cipher()}")
+                    # Can also access: conn.getpeercert() to get client cert details
+                except ssl.SSLError as ssl_err:
+                    logger.error(f"SSL handshake failed with {addr}: {ssl_err}")
+                    conn.close()
+                    continue
+
             conn.settimeout(10.0)
+
             logger.info(f"Incoming stream connection from {addr}")
 
             handshake_data = conn.recv(128)
@@ -140,14 +160,28 @@ def accept_stream_connections():
 
 def accept_ctrl_connections():
     """Accept connections on the control server and route them based on handshake"""
-    server = servers["ctrl"]
+    server_info = servers["ctrl"]
+    server = server_info["socket"] if isinstance(server_info, dict) else server_info
+    ssl_context = server_info.get("context") if isinstance(server_info, dict) else None
+
     server.settimeout(1.0)
 
     while not stop_event.is_set():
         try:
             conn, addr = server.accept()
-            conn.settimeout(10.0)
             logger.info(f"Incoming control connection from {addr}")
+
+            # Wrap socket with SSL if enabled
+            if ssl_context:
+                try:
+                    conn = ssl_context.wrap_socket(conn, server_side=True)
+                    logger.info(f"SSL handshake completed with {addr} - Cipher: {conn.cipher()}")
+                except ssl.SSLError as ssl_err:
+                    logger.error(f"SSL handshake failed with {addr}: {ssl_err}")
+                    conn.close()
+                    continue
+
+            conn.settimeout(10.0)
 
             handshake_data = conn.recv(128)
             if not handshake_data:
@@ -499,24 +533,47 @@ def run_auth():
 
 
 def setup_socket_servers():
-    """Initialize and configure socket servers with proper error handling"""
+    """Initialize and configure socket servers with SSL/TLS support"""
     try:
         # Stream socket server
         stream_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         stream_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         stream_server.bind(('0.0.0.0', PORT_STREAM))
-        stream_server.listen(10)  # Increased from 5 to handle more pending connections
-        servers["stream"] = stream_server
-        logger.info(f"Stream server listening on port {PORT_STREAM}")
+        stream_server.listen(10)
 
         # Control socket server
         ctrl_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         ctrl_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         ctrl_server.bind(('0.0.0.0', PORT_CTRL))
         ctrl_server.listen(10)
-        servers["ctrl"] = ctrl_server
-        logger.info(f"Control server listening on port {PORT_CTRL}")
 
+        # If SSL is enabled, wrap the servers in SSL context
+        if USE_SSL:
+            try:
+                # Create SSL context
+                ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+                ssl_context.verify_mode = ssl.CERT_REQUIRED
+
+                # Load certificates
+                ssl_context.load_cert_chain(certfile=os.path.join(CERT_DIR, "server.crt"),
+                                            keyfile=os.path.join(CERT_DIR, "server.key"))
+                ssl_context.load_verify_locations(cafile=os.path.join(CERT_DIR, "ca.crt"))
+
+                # Store the raw servers and the SSL context for use during accept
+                servers["stream"] = {"socket": stream_server, "context": ssl_context}
+                servers["ctrl"] = {"socket": ctrl_server, "context": ssl_context}
+
+                logger.info("SSL configuration loaded for socket servers")
+            except Exception as e:
+                logger.error(f"Failed to configure SSL: {e}, falling back to unencrypted mode")
+                servers["stream"] = stream_server
+                servers["ctrl"] = ctrl_server
+        else:
+            servers["stream"] = stream_server
+            servers["ctrl"] = ctrl_server
+
+        logger.info(f"Stream server listening on port {PORT_STREAM}")
+        logger.info(f"Control server listening on port {PORT_CTRL}")
         return True
 
     except OSError as e:
@@ -599,9 +656,10 @@ if __name__ == "__main__":
         stop_event.set()
     finally:
         # Clean shutdown of socket servers
-        for server_name, server in servers.items():
-            if server:
+        for server_name, server_info in servers.items():
+            if server_info:
                 try:
+                    server = server_info["socket"] if isinstance(server_info, dict) else server_info
                     server.close()
                     logger.info(f"{server_name} server socket closed")
                 except Exception as e:

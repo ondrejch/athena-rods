@@ -15,6 +15,9 @@ setup(
         "gpiozero",
         "spidev",
         "scipy",
-        "numpy"
+        "numpy<2",
+        "matplotlib",
+        "plotly",
+        "dash"
     ],
 )

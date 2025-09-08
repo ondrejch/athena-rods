@@ -3,7 +3,7 @@
 # Setup for ATHENA rods
 
 sudo apt update
-sudo apt install -y python3-venv python3-setuptools libcamera-dev python3-libcamera
+sudo apt install -y python3-venv python3-setuptools libcamera-dev python3-libcamera libcap-dev
 
 
 echo "Creating Python virtual environment..."
@@ -20,4 +20,3 @@ echo "Installing ATHENA rods..."
 pip install -e .
 
 echo "Setup completed."
-

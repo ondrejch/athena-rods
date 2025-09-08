@@ -10,12 +10,17 @@ import time
 import queue
 import datetime
 import json
+import os
+import ssl
 from typing import List
 
 from dash import Dash, dcc, html, Input, Output, State, no_update, ctx
 import plotly.graph_objs as go
-from arod_control import PORT_CTRL, PORT_STREAM, CONTROL_IP
+from arod_control import PORT_CTRL, PORT_STREAM, CONTROL_IP, USE_SSL, AUTH_ETC_PATH
 from arod_control.socket_utils import SocketManager, StreamingPacket
+
+# Where the SSL certificates are
+CERT_DIR: str = os.path.join(os.path.expanduser("~"), AUTH_ETC_PATH, "certs")
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -26,9 +31,15 @@ logger = logging.getLogger('VisBox')
 stream_data_q = queue.Queue(maxsize=1000)  # Limit queue size to prevent memory issues
 ctrl_status_q = queue.Queue(maxsize=100)
 
-# Socket managers
-stream_socket = SocketManager(CONTROL_IP, PORT_STREAM, "stream_display")
-ctrl_socket = SocketManager(CONTROL_IP, PORT_CTRL, "ctrl_display")
+# Initialize socket connections with SSL support
+stream_socket = SocketManager(
+    CONTROL_IP, PORT_STREAM, "stream_display",
+    use_ssl=USE_SSL, cert_dir=CERT_DIR
+)
+ctrl_socket = SocketManager(
+    CONTROL_IP, PORT_CTRL, "ctrl_display",
+    use_ssl=USE_SSL, cert_dir=CERT_DIR
+)
 
 # History storage for plotting
 time_points: List[datetime.datetime] = []

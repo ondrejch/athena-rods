@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Socket communication utilities for ATHENA-rods
+Socket communication utilities for ATHENA-rods with X.509 certificate-based encryption
 """
 
 import socket
@@ -9,27 +9,38 @@ import logging
 import threading
 import json
 import struct
-from typing import Tuple, Optional, Dict, Any
+import ssl
+import os
+from typing import Tuple, Optional, Dict, Any, Union
+from arod_control import AUTH_ETC_PATH
 
 logger = logging.getLogger('SocketUtils')
 logger.setLevel(logging.INFO)  # Ensure we're capturing appropriate log level
 
 
 class SocketManager:
-    """Manager for socket connections with reconnection capabilities"""
-
-    def __init__(self, host: str, port: int, handshake: str):
+    """Manager for socket connections with reconnection capabilities and SSL/TLS support"""
+    def __init__(self, host: str, port: int, handshake: str, use_ssl: bool = True,
+                 cert_dir: str = os.path.join(os.path.expanduser('~'), "%s/certs" % AUTH_ETC_PATH),
+                 server_mode: bool = False):
         """Initialize socket manager with connection parameters
 
         Args:
             host (str): Host to connect to
             port (int): Port number
             handshake (str): Handshake string to send on connection
+            use_ssl (bool): Whether to use SSL/TLS encryption
+            cert_dir (str): Directory containing certificates
+            server_mode (bool): Whether this is a server socket
         """
         self.host = host
         self.port = port
         self.handshake = handshake
-        self.socket: Optional[socket.socket] = None
+        self.use_ssl = use_ssl
+        self.server_mode = server_mode
+        self.cert_dir = os.path.expanduser(cert_dir)
+        self.socket: Optional[Union[socket.socket, ssl.SSLSocket]] = None
+        self.ssl_context: Optional[ssl.SSLContext] = None
         self.connected = False
         # Use a re-entrant lock to allow nested acquisition within class methods
         self.lock = threading.RLock()
@@ -37,6 +48,55 @@ class SocketManager:
         self.reconnect_delay = 1  # Starting delay (seconds)
         self.max_delay = 30  # Maximum delay (seconds)
         self._shutdown_requested = False
+
+        # Initialize SSL context if SSL is enabled
+        if self.use_ssl:
+            self._init_ssl_context()
+
+    def _init_ssl_context(self):
+        """Initialize SSL context with certificates"""
+        try:
+            # Create SSL context with modern security settings
+            self.ssl_context = ssl.create_default_context(
+                ssl.Purpose.SERVER_AUTH if not self.server_mode else ssl.Purpose.CLIENT_AUTH
+            )
+
+            # Server and client setup differ
+            if self.server_mode:
+                # Server needs certificate and private key
+                self.ssl_context.verify_mode = ssl.CERT_REQUIRED
+                self.ssl_context.load_cert_chain(
+                    certfile=os.path.join(self.cert_dir, "server.crt"),
+                    keyfile=os.path.join(self.cert_dir, "server.key")
+                )
+                # Load CA certificate to verify client certificates
+                self.ssl_context.load_verify_locations(
+                    cafile=os.path.join(self.cert_dir, "ca.crt")
+                )
+            else:
+                # Client configuration
+                # Load client certificate and key
+                client_cert = os.path.join(self.cert_dir, f"{self.handshake}.crt")
+                client_key = os.path.join(self.cert_dir, f"{self.handshake}.key")
+
+                if os.path.exists(client_cert) and os.path.exists(client_key):
+                    self.ssl_context.load_cert_chain(
+                        certfile=client_cert,
+                        keyfile=client_key
+                    )
+
+                # Load CA certificate for server verification
+                self.ssl_context.load_verify_locations(
+                    cafile=os.path.join(self.cert_dir, "ca.crt")
+                )
+
+                # Check hostname (for clients)
+                self.ssl_context.check_hostname = True
+
+            logger.info("SSL context initialized successfully")
+        except Exception as e:
+            logger.error(f"Error initializing SSL context: {e}")
+            self.ssl_context = None
 
     def connect(self, timeout: float = 10.0) -> bool:
         """Connect to the server with timeout
@@ -66,12 +126,26 @@ class SocketManager:
                     self.connected = False
 
                 # Create new socket
-                self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.socket.settimeout(timeout)
+                plain_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                plain_socket.settimeout(timeout)
 
-                # Connect and send handshake
+                # Connect and wrap with SSL if enabled
                 logger.info(f"Attempting to connect to {self.host}:{self.port} ({self.handshake})")
-                self.socket.connect((self.host, self.port))
+                plain_socket.connect((self.host, self.port))
+
+                if self.use_ssl and self.ssl_context:
+                    try:
+                        self.socket = self.ssl_context.wrap_socket(
+                            plain_socket,
+                            server_hostname=self.host if not self.server_mode else None
+                        )
+                        logger.info(f"SSL handshake completed - Cipher: {self.socket.cipher()}")
+                    except ssl.SSLError as ssl_err:
+                        logger.error(f"SSL handshake failed: {ssl_err}")
+                        plain_socket.close()
+                        return False
+                else:
+                    self.socket = plain_socket
 
                 # Send handshake with newline
                 handshake_bytes = self.handshake.encode('utf-8') + b'\n'
@@ -129,6 +203,8 @@ class SocketManager:
         finally:
             if lock_acquired:
                 self.lock.release()
+
+    # ... [rest of methods remain the same - connect_with_backoff, send_binary, etc.] ...
 
     def connect_with_backoff(self, max_attempts: Optional[int] = None) -> bool:
         """Connect with exponential backoff retry logic
