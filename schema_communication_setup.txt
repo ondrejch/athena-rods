@@ -23,9 +23,9 @@
 │                          CTRLBOX (RPi5)                           │
 │                                                                   │
 │  ┌───────────────────────────┐     ┌────────────────────────────┐ │
-│  │ Authorization             │     │ Hardware                    │ │
-│  │ - Face recognition        │     │ - LCD Display               │ │
-│  │ - RFID authentication     │     │ - Status LEDs               │ │
+│  │ Authorization             │     │ Hardware                   │ │
+│  │ - Face recognition        │     │ - LCD Display              │ │
+│  │ - RFID authentication     │     │ - Status LEDs              │ │
 │  └───────────────────────────┘     └────────────────────────────┘ │
 │                    │                              ▲               │
 │                    │                              │               │
