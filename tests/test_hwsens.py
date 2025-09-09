@@ -12,21 +12,11 @@ class TestHwsens:
     """Test class for hardware sensors"""
 
     @pytest.fixture
-    def mock_sensors(self, mocker):
-        """Fixture to mock the sensors module for each test"""
-        # Clean up any existing sensors module first
-        if 'sensors' in sys.modules:
-            del sys.modules['sensors']
-        if 'arod_control.hwsens' in sys.modules:
-            del sys.modules['arod_control.hwsens']
-            
-        # Create fresh mock
-        mock_sensors = Mock()
-        mock_sensors.iter_detected_chips.return_value = []
-        
-        # Patch sensors in sys.modules
-        mocker.patch.dict('sys.modules', {'sensors': mock_sensors})
-        return mock_sensors
+    def mock_sensors(self, fresh_sensors_mock):
+        """Fixture to provide isolated sensor mock for each test"""
+        # Use the centralized fresh_sensors_mock fixture
+        fresh_sensors_mock.iter_detected_chips.return_value = []
+        return fresh_sensors_mock
 
     def test_get_sensors_with_fan_and_temp(self, mock_sensors):
         """Test get_sensors returns correct data for fan and temperature"""
