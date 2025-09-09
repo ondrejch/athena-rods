@@ -5,27 +5,34 @@ Tests for hwsens hardware sensors module
 
 import pytest
 import sys
-from unittest.mock import Mock, patch, MagicMock
-
-# Mock hardware dependencies before importing
-mock_sensors = Mock()
-
-sys.modules['sensors'] = mock_sensors
-
-from arod_control.hwsens import get_sensors
+from unittest.mock import Mock, MagicMock
 
 
 class TestHwsens:
     """Test class for hardware sensors"""
 
-    def setup_method(self):
-        """Reset mocks before each test"""
-        mock_sensors.reset_mock()
-        # Set up a default empty return for iter_detected_chips
+    @pytest.fixture
+    def mock_sensors(self, mocker):
+        """Fixture to mock the sensors module for each test"""
+        # Clean up any existing sensors module first
+        if 'sensors' in sys.modules:
+            del sys.modules['sensors']
+        if 'arod_control.hwsens' in sys.modules:
+            del sys.modules['arod_control.hwsens']
+            
+        # Create fresh mock
+        mock_sensors = Mock()
         mock_sensors.iter_detected_chips.return_value = []
+        
+        # Patch sensors in sys.modules
+        mocker.patch.dict('sys.modules', {'sensors': mock_sensors})
+        return mock_sensors
 
-    def test_get_sensors_with_fan_and_temp(self):
+    def test_get_sensors_with_fan_and_temp(self, mock_sensors):
         """Test get_sensors returns correct data for fan and temperature"""
+        # Import here to ensure the mock is in place
+        from arod_control.hwsens import get_sensors
+        
         # Mock chip and feature objects
         mock_feature_fan = Mock()
         mock_feature_fan.label = 'fan1'
@@ -59,8 +66,9 @@ class TestHwsens:
         assert result['fan1'] == 2500.0
         assert result['temp1'] == 65.5
 
-    def test_get_sensors_case_insensitive_labels(self):
+    def test_get_sensors_case_insensitive_labels(self, mock_sensors):
         """Test that label matching is case insensitive"""
+        from arod_control.hwsens import get_sensors
         # Test with uppercase labels
         mock_feature_fan = Mock()
         mock_feature_fan.label = 'FAN1'  # Uppercase
@@ -88,8 +96,9 @@ class TestHwsens:
         assert result['fan1'] == 3000.0
         assert result['temp1'] == 70.0
 
-    def test_get_sensors_mixed_case_labels(self):
+    def test_get_sensors_mixed_case_labels(self, mock_sensors):
         """Test with mixed case labels"""
+        from arod_control.hwsens import get_sensors
         mock_feature_fan = Mock()
         mock_feature_fan.label = 'Fan1'  # Mixed case
         mock_feature_fan.get_value.return_value = 1800.0
@@ -105,8 +114,9 @@ class TestHwsens:
         assert 'fan1' in result
         assert result['fan1'] == 1800.0
 
-    def test_get_sensors_no_matching_sensors(self):
+    def test_get_sensors_no_matching_sensors(self, mock_sensors):
         """Test get_sensors returns empty dict when no matching sensors found"""
+        from arod_control.hwsens import get_sensors
         # Mock feature with non-matching label
         mock_feature = Mock()
         mock_feature.label = 'voltage1'
@@ -127,8 +137,9 @@ class TestHwsens:
         mock_sensors.init.assert_called_once()
         mock_sensors.cleanup.assert_called_once()
 
-    def test_get_sensors_only_fan(self):
+    def test_get_sensors_only_fan(self, mock_sensors):
         """Test get_sensors with only fan sensor available"""
+        from arod_control.hwsens import get_sensors
         mock_feature_fan = Mock()
         mock_feature_fan.label = 'fan1'
         mock_feature_fan.get_value.return_value = 2200.0
@@ -145,8 +156,9 @@ class TestHwsens:
         assert 'temp1' not in result
         assert result['fan1'] == 2200.0
 
-    def test_get_sensors_only_temp(self):
+    def test_get_sensors_only_temp(self, mock_sensors):
         """Test get_sensors with only temperature sensor available"""
+        from arod_control.hwsens import get_sensors
         mock_feature_temp = Mock()
         mock_feature_temp.label = 'temp1'
         mock_feature_temp.get_value.return_value = 58.3
@@ -163,8 +175,9 @@ class TestHwsens:
         assert 'fan1' not in result
         assert result['temp1'] == 58.3
 
-    def test_get_sensors_multiple_chips_same_type(self):
+    def test_get_sensors_multiple_chips_same_type(self, mock_sensors):
         """Test get_sensors with multiple chips but only matching ones are used"""
+        from arod_control.hwsens import get_sensors
         # Create multiple features, some matching, some not
         mock_feature_fan = Mock()
         mock_feature_fan.label = 'fan1'
@@ -203,8 +216,9 @@ class TestHwsens:
         assert result['fan1'] == 2800.0
         assert result['temp1'] == 62.0
 
-    def test_get_sensors_temp_not_cpu_thermal(self):
+    def test_get_sensors_temp_not_cpu_thermal(self, mock_sensors):
         """Test that temp1 is only detected from cpu_thermal chip"""
+        from arod_control.hwsens import get_sensors
         mock_feature_temp = Mock()
         mock_feature_temp.label = 'temp1'
         mock_feature_temp.get_value.return_value = 45.0
@@ -222,8 +236,9 @@ class TestHwsens:
         assert 'temp1' not in result
         assert result == {}
 
-    def test_get_sensors_with_print_enabled(self, capsys):
+    def test_get_sensors_with_print_enabled(self, mock_sensors, capsys):
         """Test get_sensors with printing enabled"""
+        from arod_control.hwsens import get_sensors
         mock_feature_fan = Mock()
         mock_feature_fan.label = 'fan1'
         mock_feature_fan.get_value.return_value = 2400.0
@@ -254,8 +269,9 @@ class TestHwsens:
         assert result['fan1'] == 2400.0
         assert result['temp1'] == 67.8
 
-    def test_get_sensors_with_print_disabled(self, capsys):
+    def test_get_sensors_with_print_disabled(self, mock_sensors, capsys):
         """Test get_sensors with printing disabled (default)"""
+        from arod_control.hwsens import get_sensors
         mock_feature_fan = Mock()
         mock_feature_fan.label = 'fan1'
         mock_feature_fan.get_value.return_value = 2100.0
@@ -276,8 +292,9 @@ class TestHwsens:
         # Verify data is still returned correctly
         assert result['fan1'] == 2100.0
 
-    def test_get_sensors_empty_chips(self):
+    def test_get_sensors_empty_chips(self, mock_sensors):
         """Test get_sensors with no chips detected"""
+        from arod_control.hwsens import get_sensors
         mock_sensors.iter_detected_chips.return_value = []
         
         result = get_sensors()
@@ -286,8 +303,9 @@ class TestHwsens:
         mock_sensors.init.assert_called_once()
         mock_sensors.cleanup.assert_called_once()
 
-    def test_get_sensors_chip_with_no_features(self):
+    def test_get_sensors_chip_with_no_features(self, mock_sensors):
         """Test get_sensors with chip that has no features"""
+        from arod_control.hwsens import get_sensors
         mock_chip = Mock()
         mock_chip.prefix = b'empty_chip'
         mock_chip.__iter__ = Mock(return_value=iter([]))  # No features
@@ -298,8 +316,9 @@ class TestHwsens:
         
         assert result == {}
 
-    def test_get_sensors_feature_value_zero(self):
+    def test_get_sensors_feature_value_zero(self, mock_sensors):
         """Test get_sensors handles zero values correctly"""
+        from arod_control.hwsens import get_sensors
         mock_feature_fan = Mock()
         mock_feature_fan.label = 'fan1'
         mock_feature_fan.get_value.return_value = 0.0  # Fan stopped
@@ -315,8 +334,9 @@ class TestHwsens:
         assert 'fan1' in result
         assert result['fan1'] == 0.0
 
-    def test_sensors_lifecycle_called_correctly(self):
+    def test_sensors_lifecycle_called_correctly(self, mock_sensors):
         """Test that sensors.init() and sensors.cleanup() are always called"""
+        from arod_control.hwsens import get_sensors
         # Mock an empty chip list
         mock_sensors.iter_detected_chips.return_value = []
         
