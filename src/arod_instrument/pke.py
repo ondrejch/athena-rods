@@ -6,7 +6,7 @@ Ondrej Chvala <ochvala@utexas.edu>
 import numpy as np
 import time
 import threading
-from solver import PointKineticsEquationSolver
+from .solver import PointKineticsEquationSolver
 
 
 class ReactorPowerCalculator(threading.Thread):
