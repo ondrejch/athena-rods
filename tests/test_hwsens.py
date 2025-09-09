@@ -21,6 +21,8 @@ class TestHwsens:
     def setup_method(self):
         """Reset mocks before each test"""
         mock_sensors.reset_mock()
+        # Set up a default empty return for iter_detected_chips
+        mock_sensors.iter_detected_chips.return_value = []
 
     def test_get_sensors_with_fan_and_temp(self):
         """Test get_sensors returns correct data for fan and temperature"""
