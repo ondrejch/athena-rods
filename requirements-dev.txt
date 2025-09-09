@@ -1,3 +1,5 @@
 # Development dependencies for ATHENA-rods testing
 pytest>=7.0.0
 pytest-mock>=3.10.0
+numpy>=1.21.0
+scipy>=1.7.0
