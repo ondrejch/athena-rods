@@ -22,6 +22,7 @@
 #    You should have received a copy of the GNU Lesser General Public License
 #    along with MFRC522-Python.  If not, see <http://www.gnu.org/licenses/>.
 #
+from typing import Tuple, List, Optional, Any
 import logging
 
 import spidev
@@ -141,7 +142,8 @@ class MFRC522:
 
     SERNUM = []
 
-    def __init__(self, bus=0, device=0, spd=1000000, pin_rst=22, debug_level="WARNING"):
+    def __init__(self, bus: int = 0, device: int = 0, spd: int = 1000000, 
+                 pin_rst: int = 22, debug_level: str = "WARNING") -> None:
         """Initialize the instance with specific SPI and logging configurations.
         Parameters:
             - bus (int): The SPI bus number to use.
@@ -161,21 +163,21 @@ class MFRC522:
         DigitalOutputDevice(pin_rst).on()
         self.mfrc522_init()
 
-    def mfrc522_reset(self):
+    def mfrc522_reset(self) -> None:
         self.write_mfrc522(self.COMMAND_REG, self.PCD_RESETPHASE)
 
-    def write_mfrc522(self, addr, val):
+    def write_mfrc522(self, addr: int, val: int) -> None:
         self.spi.xfer2([(addr << 1) & 0x7E, val])
 
-    def read_mfrc522(self, addr):
+    def read_mfrc522(self, addr: int) -> int:
         return self.spi.xfer2([((addr << 1) & 0x7E) | 0x80, 0])[1]
 
 
-    def set_bit_mask(self, reg, mask):
+    def set_bit_mask(self, reg: int, mask: int) -> None:
         chip_values = self.read_mfrc522(reg)
         self.write_mfrc522(reg, chip_values | mask)
 
-    def clear_bit_mask(self, reg, mask):
+    def clear_bit_mask(self, reg: int, mask: int) -> None:
         chip_values = self.read_mfrc522(reg)
         self.write_mfrc522(reg, chip_values & (~mask))
 

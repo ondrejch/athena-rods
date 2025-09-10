@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
+from typing import Optional, List
 import time
 import smbus2 as smbus
 import subprocess
 
 BUS = smbus.SMBus(1)
 
-def write_word(addr, data):
+def write_word(addr: int, data: int) -> None:
 	"""Write a word to a specified address with optional bit adjustment based on global BLEN setting.
 	Parameters:
 	- addr (int): The address to which the data should be written.
@@ -21,7 +22,7 @@ def write_word(addr, data):
 		temp &= 0xF7
 	BUS.write_byte(addr ,temp)
 
-def send_command(comm):
+def send_command(comm: int) -> None:
 	# Send bit7-4 firstly
 	"""Sends a command to an LCD over I2C by splitting it into two 4-bit transfers.
 	Parameters:
@@ -43,7 +44,7 @@ def send_command(comm):
 	buf &= 0xFB               # Make EN = 0
 	write_word(LCD_ADDR ,buf)
 
-def send_data(data):
+def send_data(data: int) -> None:
 	# Send bit7-4 firstly
 	"""Sends 8-bit data to the LCD by writing high and low nibble separately.
 	Parameters:
@@ -65,14 +66,14 @@ def send_data(data):
 	buf &= 0xFB               # Make EN = 0
 	write_word(LCD_ADDR ,buf)
 
-def i2c_scan():
+def i2c_scan() -> List[str]:
     cmd = "i2cdetect -y 1 |awk \'NR>1 {$1=\"\";print}\'"
     result = subprocess.check_output(cmd, shell=True).decode()
     result = result.replace("\n", "").replace(" --", "")
     i2c_list = result.split(' ')
     return i2c_list
 
-def init(addr=None, bl=1):
+def init(addr: Optional[int] = None, bl: int = 1) -> None:
 	"""Initializes the LCD with the specified I2C address and backlight setting.
 	Parameters:
 	- addr (int, optional): I2C address of the LCD. Defaults to None, which attempts to auto-detect address 0x27 or 0x3f.
@@ -114,14 +115,14 @@ def init(addr=None, bl=1):
 	else:
 		return True
 
-def clear():
+def clear() -> None:
 	send_command(0x01) # Clear Screen
 
-def openlight():  # Enable the backlight
+def openlight() -> None:  # Enable the backlight
 	BUS.write_byte(0x27,0x08)
 	BUS.close()
 
-def write(x, y, str):
+def write(x: int, y: int, str: str) -> None:
 	"""Positions the cursor at coordinates (x, y) on a display and writes a given string.
 	Parameters:
 	- x (int): The horizontal position on the display, limited to the range 0-15.

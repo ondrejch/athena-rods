@@ -3,6 +3,7 @@
 Tools for LCD1602
 Ondrej Chvala <ochvala@utexas.edu>
 """
+from typing import Dict, Any
 import os
 from datetime import datetime
 from arod_control.hwsens import get_sensors
@@ -17,19 +18,19 @@ class Display():
         - Initializes the LCD display with a specific I2C address and backlight setting.
         - Uses external sensor data to update and display system load and temperature.
         - Supports both single-line and multi-line message displays, fitting text appropriately across two lines of the LCD screen."""
-    def __init__(self):
+    def __init__(self) -> None:
         # Initialize LCD with I2C address 0x27 and enable backlight
         LCD1602.init(0x27, 1)
         LCD1602.write(0, 0, '** ATHENArods **'.ljust(16))
         LCD1602.write(0, 1, datetime.now().isoformat().ljust(16))
 
-    def show_sensors(self):
-        load5 = os.getloadavg()[2]
-        sens = get_sensors()
+    def show_sensors(self) -> None:
+        load5: float = os.getloadavg()[2]
+        sens: Dict[str, Any] = get_sensors()
         LCD1602.write(0, 0, f'L {load5:.2f}, {sens["fan1"]:.0f} rpm'.ljust(16))
         LCD1602.write(0, 1, f'temp {sens["temp1"]:.1f} C'.ljust(16))
 
-    def show_message(self, message: str):
+    def show_message(self, message: str) -> None:
         """Show a message on a 16x2 LCD screen.
         Parameters:
             - message (str): The message to be displayed on the LCD screen. Can be a single or multi-line string.

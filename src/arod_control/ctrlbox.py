@@ -4,6 +4,7 @@ Main loop for the control box RPi5
 Ondrej Chvala <ochvala@utexas.edu>
 """
 
+from typing import Dict, Any, Optional, List
 import logging
 import threading
 import time
@@ -19,7 +20,7 @@ from arod_control.socket_utils import StreamingPacket  # For packet size (now 4 
 
 CERT_DIR: str = os.path.join(os.path.expanduser("~"), AUTH_ETC_PATH, "certs")  # Where the SSL certificates are
 FAKE_FACE_AUTH: bool = True  # FAKE face authorization, use for development only!!
-CB_STATE: dict = {  # Control box machine state
+CB_STATE: Dict[str, Any] = {  # Control box machine state
     'auth': {       # Authorization status
         'face': '',
         'rfid': '',
@@ -46,21 +47,21 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(leve
 logger = logging.getLogger('ACBox')  # ATHENA rods Control Box
 
 # SOCKET communications setup
-connections = {
+connections: Dict[str, Any] = {
     "stream_instr": None,
     "stream_display": [],  # Changed to list
     "ctrl_instr": None,
     "ctrl_display": []     # Changed to list
 }
-connection_lock = threading.Lock()
-servers = {
+connection_lock: threading.Lock = threading.Lock()
+servers: Dict[str, Any] = {
     "stream": None,
     "ctrl": None
 }
-stop_event = threading.Event()  # Global event for clean shutdown
+stop_event: threading.Event = threading.Event()  # Global event for clean shutdown
 
 
-def accept_stream_connections():
+def accept_stream_connections() -> None:
     """Accept connections on the stream server and route them based on handshake"""
     server_info = servers["stream"]
     server = server_info["socket"] if isinstance(server_info, dict) else server_info
@@ -143,7 +144,7 @@ def accept_stream_connections():
             stop_event.wait(timeout=1)
 
 
-def accept_ctrl_connections():
+def accept_ctrl_connections() -> None:
     """Accept connections on the control server and route them based on handshake"""
     server_info = servers["ctrl"]
     server = server_info["socket"] if isinstance(server_info, dict) else server_info
@@ -226,7 +227,7 @@ def accept_ctrl_connections():
             stop_event.wait(timeout=1)
 
 
-def forward_stream(src_key, dst_key):
+def forward_stream(src_key: str, dst_key: str) -> None:
     """
     Socket communication: forwarding stream data between connections
     with robust error handling and reconnection logic.
@@ -297,7 +298,7 @@ def forward_stream(src_key, dst_key):
             stop_event.wait(timeout=0.5)
 
 
-def forward_ctrl(src_key, dst_key):
+def forward_ctrl(src_key: str, dst_key: str) -> None:
     """
     Socket communication: Forwarding JSON-formatted messages between control sockets.
     Supports many-to-one and one-to-many forwarding.
@@ -395,7 +396,7 @@ def forward_ctrl(src_key, dst_key):
         stop_event.wait(timeout=0.5)
 
 
-def run_leds():
+def run_leds() -> None:
     """Thread that manages state of LEDs"""
     leds = LEDs()
     logger.info('LEDs thread initialized')
@@ -425,7 +426,7 @@ def run_leds():
         stop_event.wait(timeout=CB_STATE['refresh']['leds'])
 
 
-def run_display():
+def run_display() -> None:
     """Thread that manages the LCD display"""
     display = Display()
     logger.info('LCD display thread initialized')
@@ -442,7 +443,7 @@ def run_display():
             display.show_sensors()
 
 
-def run_auth():
+def run_auth() -> None:
     """Thread that manages authorization"""
     rfid_auth = RFID_Authorization()
     face_auth = FaceAuthorization()
@@ -517,7 +518,7 @@ def run_auth():
             logger.info("Authorization: RFID re-authorization failed, resetting to unauthorized!")
 
 
-def setup_socket_servers():
+def setup_socket_servers() -> bool:
     """Initialize and configure socket servers with SSL/TLS support"""
     try:
         # Stream socket server
@@ -574,7 +575,7 @@ def setup_socket_servers():
         return False
 
 
-def main_loop():
+def main_loop() -> None:
     """Main program loop that starts all threads and manages socket servers"""
     global stop_event
     stop_event = threading.Event()
