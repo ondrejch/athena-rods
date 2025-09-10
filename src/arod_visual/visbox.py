@@ -180,15 +180,15 @@ def stream_receiver() -> None:
                     logger.warning(f"Ignoring unreasonable position: {position}")
                     continue
 
-                # Convert timestamp_ms to datetime (UTC)
+                # Convert timestamp_ms to datetime (local)
                 try:
-                    dt = datetime.datetime.utcfromtimestamp(ts_ms / 1000.0)
+                    dt = datetime.datetime.fromtimestamp(ts_ms / 1000.0)
                 except (OverflowError, OSError, ValueError):
-                    dt = datetime.datetime.utcnow()
+                    dt = datetime.datetime.now()
 
                 counter += 1
                 if counter % 100 == 0:
-                    logger.info(f"Stream data: t={dt.isoformat()}Z, n={neutron_density:.2f}, rho={rho:.6f}, pos={position:.2f}")
+                    logger.info(f"Stream data: t={dt.isoformat()}, n={neutron_density:.2f}, rho={rho:.6f}, pos={position:.2f}")
 
                 # Only queue valid data points (include timestamp)
                 try:
@@ -243,7 +243,7 @@ def create_empty_figure(title: str, y_axis_title: str, theme: str = "light") -> 
         'layout': {
             'title': {'text': title, 'font': {'size': 22, 'color': theme_data['plot']['text_color']}},
             'xaxis': {
-                'title': {'text': 'Time (UTC)', 'font': {'size': 20, 'color': theme_data['plot']['text_color']}},
+                'title': {'text': 'Time (Local)', 'font': {'size': 20, 'color': theme_data['plot']['text_color']}},
                 'type': 'date',
                 'tickfont': {'size': 14, 'color': theme_data['plot']['text_color']},
                 'gridcolor': theme_data['plot']['gridcolor'],
