@@ -19,7 +19,7 @@ class Motor(OriginalMotor):
     """
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.speed: float = 0.5  # Default motor speed
+        self.speed: float = 0.8  # Default motor speed
         self._status: int = 0    # Private status variable, represents direction: 1 (up), -1 (down), 0 (stopped)
         self.status_cond: threading.Condition = threading.Condition()  # Condition variable for status changes
 
