@@ -4,6 +4,7 @@ User authorization to operate ATHENA rod
 Ondrej Chvala <ochvala@utexas.edu>
 """
 
+from typing import Dict, List, Any, Tuple, Optional
 import os
 import hashlib
 import cv2
@@ -16,12 +17,12 @@ from arod_control import AUTH_ETC_PATH
 
 class FaceAuthorization:
     """ Face recognition using RPi5 camera """
-    def __init__(self):
+    def __init__(self) -> None:
         # Load known faces' embeddings
         with open(os.path.join(os.path.expanduser('~'), '%s/face_rec_encodings.pickle' % AUTH_ETC_PATH), 'rb') as f:
-            self.data = pickle.load(f)
+            self.data: Dict[str, List[Any]] = pickle.load(f)
         # Start RPi5 camera
-        self.picam2 = Picamera2()
+        self.picam2: Picamera2 = Picamera2()
         self.picam2.start()
 
     def scan_face(self) -> str:
@@ -47,7 +48,7 @@ class FaceAuthorization:
             # print(f'{name}')
             return name
 
-    def __del__(self):
+    def __del__(self) -> None:
         cv2.destroyAllWindows()
         self.picam2.close()
 
@@ -62,7 +63,7 @@ class RFID_Authorization:
         - Reads and optionally prints the content of an RFID tag using a reader device for diagnostic purposes.
         - Compares the read data with expected data to check the authenticity of the RFID tag.
         - Writes correct hash digest data onto the RFID tag to ensure the tag holds valid expected data."""
-    def __init__(self):
+    def __init__(self) -> None:
         # Read fingerprint of ATHENA rod CA certificate
         """Initialize the class and configure the fingerprint and block addresses.
         Parameters:
@@ -83,7 +84,7 @@ class RFID_Authorization:
 
         self.do_print: bool = False
 
-    def get_digest(self, tag_id):           # Get data expected on the RFIC card
+    def get_digest(self, tag_id: str) -> str:           # Get data expected on the RFIC card
         """Get data expected on the RFIC card.
         Parameters:
             - tag_id (str or int): Tag identifier to be processed for hashing.
@@ -97,7 +98,7 @@ class RFID_Authorization:
         hash_obj.update(n_to_hash)          # Make hash
         return hash_obj.hexdigest()         # This is what should be stored on the RFID tag
 
-    def read_tag(self) -> tuple[str, str]:          # Read RFID tag content
+    def read_tag(self) -> Tuple[str, str]:          # Read RFID tag content
         """Reads the content of an RFID tag using a reader device.
         Parameters:
             - None

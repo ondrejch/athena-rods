@@ -4,6 +4,7 @@ Script to generate X.509 certificates for ATHENA-rods socket encryption
 Needs to be run with root privileges.
 Ondrej Chvala <ochvala@utexas.edu>
 """
+from typing import Dict, List, Optional, Tuple
 import os
 import subprocess
 import re
@@ -20,8 +21,8 @@ ATHENA_CA_CRT: str = '%s/ca-chain.crt' % PKI_PATH
 ATHENA_CA_KEY: str = '%s/private/athena.key' % PKI_PATH
 
 
-def load_vars(filepath):
-    vars_dict = {}
+def load_vars(filepath: str) -> Dict[str, str]:
+    vars_dict: Dict[str, str] = {}
     with open(filepath, 'r') as f:
         for line in f:
             # Match lines like: set_var VAR_NAME "value" or set_var VAR_NAME value

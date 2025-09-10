@@ -12,7 +12,7 @@ import datetime
 import json
 import os
 import ssl
-from typing import List
+from typing import List, Dict, Any, Tuple, Optional, Union
 
 from dash import Dash, dcc, html, Input, Output, State, no_update, ctx
 import plotly.graph_objs as go
@@ -28,8 +28,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('VisBox')
 
 # Data queues for thread communication
-stream_data_q = queue.Queue(maxsize=1000)  # Limit queue size to prevent memory issues
-ctrl_status_q = queue.Queue(maxsize=100)
+stream_data_q: queue.Queue[Tuple[float, float, float, datetime.datetime]] = queue.Queue(maxsize=1000)  # Limit queue size to prevent memory issues
+ctrl_status_q: queue.Queue[Dict[str, Any]] = queue.Queue(maxsize=100)
 
 # Initialize socket connections with SSL support
 stream_socket = SocketManager(
@@ -128,7 +128,7 @@ DARK_THEME = {
 }
 
 
-def is_value_reasonable(name, value):
+def is_value_reasonable(name: str, value: Union[int, float]) -> bool:
     """Check if a value is within reasonable bounds"""
     if name not in VALUE_BOUNDS:
         return True  # No bounds defined, accept any value
@@ -153,7 +153,7 @@ def moving_average(values: List[float], window: int = 20) -> List[float]:
     return result
 
 
-def stream_receiver():
+def stream_receiver() -> None:
     """Receives and processes continuous data stream from a socket."""
     counter = 0
     while True:
@@ -211,7 +211,7 @@ def stream_receiver():
             time.sleep(1)
 
 
-def ctrl_receiver():
+def ctrl_receiver() -> None:
     """Receives messages from a socket and updates a queue with JSON-decoded status."""
     while True:
         try:
@@ -235,7 +235,7 @@ def ctrl_receiver():
 
 
 # Create default empty figures to ensure consistent initialization
-def create_empty_figure(title, y_axis_title, theme="light"):
+def create_empty_figure(title: str, y_axis_title: str, theme: str = "light") -> Dict[str, Any]:
     """Create an empty figure with the specified theme"""
     theme_data = LIGHT_THEME if theme == "light" else DARK_THEME
 
@@ -382,7 +382,7 @@ app.layout = html.Div([
 ], style={'padding': '20px', 'fontFamily': 'Arial', 'backgroundColor': LIGHT_THEME['background_color'], 'color': LIGHT_THEME['text_color']}, id='main-container')
 
 
-def start_connections():
+def start_connections() -> None:
     """Initialize socket connections and start receiver threads"""
     # Initialize connections with retry
     logger.info("Starting connections to control box...")

@@ -4,10 +4,11 @@
 Adopted from https://github.com/Dennis-89/MFRC522-python-SimpleMFRC522.git
 """
 
+from typing import Tuple, Optional, List, Dict, Any
 from . import MFRC522
 from itertools import chain
 
-DEFAULT_KEYS = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
+DEFAULT_KEYS: List[int] = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
 
 
 class SimpleMFRC522:
@@ -18,38 +19,38 @@ class SimpleMFRC522:
         - Initializes an MFRC522 object to interact with the RFID hardware.
         - Provides blocking and non-blocking read/write operations for RFID tags.
         - Utilizes a static method to convert a UID to a numeric ID for tag identification."""
-    KEYS = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
-    BLOCK_ADDRESSES = [8, 9, 10]
+    KEYS: List[int] = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
+    BLOCK_ADDRESSES: List[int] = [8, 9, 10]
 
-    def __init__(self):
-        self.reader = MFRC522()
+    def __init__(self) -> None:
+        self.reader: MFRC522.MFRC522 = MFRC522.MFRC522()
 
-    def read(self):
+    def read(self) -> Tuple[Optional[int], Optional[str]]:
         while True:
             tag_id, text = self._read_no_block()
             if tag_id:
                 return tag_id, text
 
-    def write(self, text):
+    def write(self, text: str) -> Tuple[Optional[int], Optional[str]]:
         while True:
             tag_id, text_in = self._write_no_block(text)
             if tag_id:
                 return tag_id, text_in
 
-    def _read_id(self):
+    def _read_id(self) -> Optional[int]:
         while True:
             id_tag = self._read_id_no_block()
             if id_tag:
                 return id_tag
 
-    def _read_id_no_block(self):
+    def _read_id_no_block(self) -> Optional[int]:
         status, _ = self.reader.mfrc522_request(self.reader.PICC_REQIDL)
         if status != self.reader.MI_OK:
             return None
         status, uid = self.reader.mfrc522_anticoll()
         return None if status != self.reader.MI_OK else self._uid_to_number(uid)
 
-    def _read_no_block(self):
+    def _read_no_block(self) -> Tuple[Optional[int], Optional[str]]:
         """Reads data from an RFID tag without blocking on operations.
         Parameters:
             - None
@@ -110,7 +111,7 @@ class SimpleMFRC522:
         return tag_id, text[: len(self.BLOCK_ADDRESSES) * 16]
 
     @staticmethod
-    def _uid_to_number(uid):
+    def _uid_to_number(uid: List[int]) -> int:
         number = 0
         for index, character in enumerate(uid):
             number = number * 256 + character
@@ -120,7 +121,7 @@ class SimpleMFRC522:
 
 class StoreMFRC522(SimpleMFRC522):
     """ Use more storage on the RFID card """
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize a class with block addresses and calculate total block slots.
         Parameters:
             None

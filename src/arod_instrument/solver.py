@@ -4,17 +4,18 @@ Ondrej Chvala <ochvala@utexas.edu>
 MIT license
 For a similar PKE implementations in MATLAB/Octave, see: https://github.com/ondrejch/PointKineticsOctave """
 
+from typing import Callable, Dict, Any, Optional, Tuple, Union, List
 import numpy as np
 from scipy.integrate import solve_ivp
 import matplotlib.pyplot as plt
 
-thermal_default_params: dict = {
+thermal_default_params: Dict[str, Any] = {
     'beta': np.array([0.000215, 0.00142, 0.00127, 0.00257, 0.00075, 0.00027]),
     'lambda_': np.array([0.0126, 0.0337, 0.139, 0.325, 1.13, 2.50]),
     'Lambda': 5e-4
 }
 
-fast_reactor_params: dict = {
+fast_reactor_params: Dict[str, Any] = {
     'beta': np.array([0.00022, 0.00142, 0.00127, 0.00257, 0.00075, 0.00027]),
     'lambda_': np.array([0.0126, 0.0337, 0.139, 0.325, 1.13, 2.50]),
     'Lambda': 1e-7
@@ -32,32 +33,36 @@ class PointKineticsEquationSolver:
         - Initializes the neutron density and delayed neutron precursor concentrations at steady-state.
         - Uses Runge-Kutta method (RK45) for solving differential equations.
         - Offers plotting options for analyzing neuron density, precursor concentrations, and source contribution with optional logging in visual representations."""
-    def __init__(self, reactivity_func, source_func=None, params=None):
+    def __init__(self, reactivity_func: Callable[[float], float], 
+                 source_func: Optional[Callable[[float], float]] = None, 
+                 params: Optional[Dict[str, Any]] = None) -> None:
         """ Nuclear reactor point kinetics analyzer with modular plotting
         Args:
             reactivity_func (callable): ρ(t) in dollars
             params (dict): Reactor parameters (default: U-235 thermal) """
         if params is None:
             params = thermal_default_params
-        self.params = params
-        self.beta = params['beta']
-        self.lambda_ = params['lambda_']
-        self.Lambda = params['Lambda']
+        self.params: Dict[str, Any] = params
+        self.beta: np.ndarray = params['beta']
+        self.lambda_: np.ndarray = params['lambda_']
+        self.Lambda: float = params['Lambda']
         # Precompute constants for speed
-        self.beta_total = np.sum(self.beta)
-        self.beta_div_Lambda = self.beta / self.Lambda
+        self.beta_total: float = np.sum(self.beta)
+        self.beta_div_Lambda: np.ndarray = self.beta / self.Lambda
         self._validate_parameters()
-        self.reactivity_func = reactivity_func
+        self.reactivity_func: Callable[[float], float] = reactivity_func
         if source_func is None:
             source_func = (lambda t: 0.0)  # Default: no source
-        self.source_func = source_func
-        self.solution = None
+        self.source_func: Callable[[float], float] = source_func
+        self.solution: Optional[Any] = None
 
-    def _validate_parameters(self):
+    def _validate_parameters(self) -> None:
         if len(self.params['beta']) != len(self.params['lambda_']) or len(self.params['beta']) < 1:
             raise ValueError("Beta and lambda arrays must have equal length")
 
-    def solve(self, t_span=(0, 10), t_eval=None, y0_override=None):
+    def solve(self, t_span: Tuple[float, float] = (0, 10), 
+              t_eval: Optional[np.ndarray] = None, 
+              y0_override: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray]:
         """Solve the point kinetics equations"""
         beta = self.params['beta']
         lambda_ = self.params['lambda_']
@@ -72,30 +77,31 @@ class PointKineticsEquationSolver:
             C0 = beta / (lambda_ * Lambda) * n0
             y0 = np.concatenate(([n0], C0))
 
-        def equations(t, y):
+        def equations(t: float, y: np.ndarray) -> np.ndarray:
             """Calculate the rate of change in neutron population and precursor concentrations over time.
             Parameters:
                 - t (float): Time variable.
                 - y (list): Contains neutron density and concentrations of delayed neutron precursors.
             Returns:
                 - list: A list comprising the rate of change of neutron density followed by the rates of change of each precursor concentration."""
-            n = y[0]
-            C = np.array(y[1:])  # vectorize precursor concentrations
-            rho = self.reactivity_func(t)       # External reactivity
-            Q = self.source_func(t)             # External neutron source
-            prompt = (rho - beta_sum) / Lambda
-            delayed = np.dot(lambda_, C)
+            n: float = y[0]
+            C: np.ndarray = np.array(y[1:])  # vectorize precursor concentrations
+            rho: float = self.reactivity_func(t)       # External reactivity
+            Q: float = self.source_func(t)             # External neutron source
+            prompt: float = (rho - beta_sum) / Lambda
+            delayed: float = np.dot(lambda_, C)
 
-            dndt = n * prompt + delayed + Q
+            dndt: float = n * prompt + delayed + Q
             # dCdt = [beta[i] / Lambda * n - lambda_[i] * C[i] for i in range(len(C))]
-            dCdt = beta_div_Lambda * n - lambda_ * np.array(C)  # Numpy vectorization
+            dCdt: np.ndarray = beta_div_Lambda * n - lambda_ * np.array(C)  # Numpy vectorization
             return np.concatenate(([dndt], dCdt))
 
         self.solution = solve_ivp(equations, t_span, y0, method='RK45', t_eval=t_eval, rtol=1e-6, atol=1e-8)
         # print("**** SOLUTION: ", self.solution)
         return self.solution.t, self.solution.y
 
-    def plot_neutron_density(self, figsize=(8, 4), logscale=True, **plot_kwargs):
+    def plot_neutron_density(self, figsize: Tuple[int, int] = (8, 4), 
+                            logscale: bool = True, **plot_kwargs: Any) -> Tuple[Any, Any]:
         """ Plot neutron density temporal evolution
         Args:
             logscale (bool): Use logarithmic y-axis
@@ -112,7 +118,8 @@ class PointKineticsEquationSolver:
         ax.grid(True, which='both' if logscale else 'major', alpha=0.4)
         return fig, ax
 
-    def plot_precursors(self, groups='all', figsize=(10, 6), **plot_kwargs):
+    def plot_precursors(self, groups: Union[str, List[int]] = 'all', 
+                       figsize: Tuple[int, int] = (10, 6), **plot_kwargs: Any) -> Tuple[Any, Any]:
         """ Plot precursor group concentrations
         Args:
             groups: List of group indices (0-based) or 'all' """
@@ -129,7 +136,7 @@ class PointKineticsEquationSolver:
         ax.grid(True, alpha=0.4)
         return fig, ax
 
-    def plot_source_contribution(self, figsize=(8, 4), **plot_kwargs):
+    def plot_source_contribution(self, figsize: Tuple[int, int] = (8, 4), **plot_kwargs: Any) -> Tuple[Any, Any]:
         """Plot the external source function over time"""
         if not self.solution:
             raise RuntimeError("Call solve() before plotting")

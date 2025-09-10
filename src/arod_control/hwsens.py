@@ -3,17 +3,18 @@
 Handles hardware sensors information on RPi5
 Ondrej Chvala <ochvala@utexas.edu>
 """
+from typing import Dict, Any
 import sensors
 
 
-def get_sensors(do_print: bool = False) -> dict:
+def get_sensors(do_print: bool = False) -> Dict[str, Any]:
     """Gets sensor data for fan and CPU temperature.
     Parameters:
         - do_print (bool): Whether to print the sensor readings; defaults to False.
     Returns:
         - dict: Dictionary containing fan speed and CPU temperature data."""
     sensors.init()
-    data: dict = {}
+    data: Dict[str, Any] = {}
     for chip in sensors.iter_detected_chips():
         for feature in chip:
             if feature.label.lower() == 'fan1':

@@ -3,6 +3,7 @@ Management of sensors and actuators connected to the Instrumentation box
 Ondrej Chvala <ochvala@utexas.edu>
 """
 
+from typing import Tuple, Any
 from gpiozero import DistanceSensor
 from gpiozero import Motor as OriginalMotor
 from gpiozero import AngularServo
@@ -16,11 +17,11 @@ class Motor(OriginalMotor):
     Adding methods to move the rod intuitively and a mechanism
     to notify other threads of status changes.
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.speed: float = 0.5  # Default motor speed
         self._status: int = 0    # Private status variable, represents direction: 1 (up), -1 (down), 0 (stopped)
-        self.status_cond = threading.Condition()  # Condition variable for status changes
+        self.status_cond: threading.Condition = threading.Condition()  # Condition variable for status changes
 
     @property
     def status(self) -> int:
@@ -28,7 +29,7 @@ class Motor(OriginalMotor):
         with self.status_cond:
             return self._status
 
-    def _set_status(self, new_status: int):
+    def _set_status(self, new_status: int) -> None:
         """Internal method to set the status and notify all waiting threads."""
         with self.status_cond:
             if self._status != new_status:
@@ -36,22 +37,22 @@ class Motor(OriginalMotor):
                 # Notify all threads that are waiting for the status to change
                 self.status_cond.notify_all()
 
-    def up(self):
+    def up(self) -> None:
         """Moves the motor up (backward) and sets status to 1."""
         self.backward(self.speed)
         self._set_status(1)
 
-    def down(self):
+    def down(self) -> None:
         """Moves the motor down (forward) and sets status to -1."""
         self.forward(self.speed)
         self._set_status(-1)
 
-    def stop(self):
+    def stop(self) -> None:
         """Stops the motor and sets status to 0."""
         super().stop()  # Call the stop method from the parent class to halt movement
         self._set_status(0)
 
-    def wait_for_status_change(self, stop_event: threading.Event, timeout: float = 0.1) -> (bool, int):
+    def wait_for_status_change(self, stop_event: threading.Event, timeout: float = 0.1) -> Tuple[bool, int]:
         """
         Waits for the motor status to change or until the timeout expires.
         This method is also responsive to a global stop_event.
@@ -87,19 +88,19 @@ class Motor(OriginalMotor):
             return status_did_change, self._status
 
 
-sonar = DistanceSensor(echo=24, trigger=23)  # Ultrasound sonar to measure distance
-motor = Motor(forward=17, backward=27, enable=22)  # Motor that drives the rod
-servo = AngularServo(15, initial_angle=180.0, min_angle=0.0, max_angle=180.0,  # Rod engagement servo
-                     min_pulse_width=1.0/1000.0, max_pulse_width=25.0/10000.0)
-limit_switch = Button(20)  # Limit switch at the bottom of the control rod slider
+sonar: DistanceSensor = DistanceSensor(echo=24, trigger=23)  # Ultrasound sonar to measure distance
+motor: Motor = Motor(forward=17, backward=27, enable=22)  # Motor that drives the rod
+servo: AngularServo = AngularServo(15, initial_angle=180.0, min_angle=0.0, max_angle=180.0,  # Rod engagement servo
+                                  min_pulse_width=1.0/1000.0, max_pulse_width=25.0/10000.0)
+limit_switch: Button = Button(20)  # Limit switch at the bottom of the control rod slider
 limit_switch.when_pressed = motor.stop  # Switch motor off when limit switch is hit
 
 
-def rod_scram():
+def rod_scram() -> None:
     servo.angle = 0.0
 
 
-def rod_engage():
+def rod_engage() -> None:
     servo.angle = 180.0
 
 
@@ -115,7 +116,7 @@ def get_distance() -> float:
     return sonar.distance * 100.0
 
 
-def readFirstLine(filename):
+def readFirstLine(filename: str) -> Tuple[bool, int]:
     """ Function to read first line and return integer, for DHT11 """
     try:
         f = open(filename, "rt")
@@ -129,7 +130,7 @@ def readFirstLine(filename):
         return False, 0
 
 
-def get_dht() -> tuple[float, float]:
+def get_dht() -> Tuple[float, float]:
     """ Reads DHT11 sensor and returns temperature [C] and humidity [%]
         Note this is different for RPi5 than other Pis!
         See: https://forums.raspberrypi.com/viewtopic.php?t=366269 """

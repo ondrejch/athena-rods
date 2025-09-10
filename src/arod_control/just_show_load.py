@@ -9,7 +9,7 @@ import time
 from arod_control.display import Display
 
 
-def run_display():
+def run_display() -> None:
     """ Thread that manages the LCD display """
     display = Display()
     time.sleep(2)
@@ -18,7 +18,7 @@ def run_display():
         time.sleep(1)
 
 
-def main_loop():
+def main_loop() -> None:
     # Start all threads
     """Runs the main loop with threading, primarily for running a display function.
     Parameters:

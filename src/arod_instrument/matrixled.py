@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """ 8x8 matrix LED display """
 
+from typing import Any
 from luma.core.interface.serial import spi, noop
 from luma.core.render import canvas
 from luma.core.virtual import viewport
@@ -9,14 +10,14 @@ from luma.core.legacy import text
 from luma.core.legacy.font import proportional, CP437_FONT, LCD_FONT
 import time
 
-serial = spi(port=0, device=0, gpio=noop())
-device = max7219(serial, rotate=1)
+serial: Any = spi(port=0, device=0, gpio=noop())
+device: Any = max7219(serial, rotate=1)
 device.contrast(10)
-virtual = viewport(device, width=200, height=400)
+virtual: Any = viewport(device, width=200, height=400)
 device.clear()  # Turns off all LEDs
 
 
-def displayRectangle(a: int, do_fill: bool = True):
+def displayRectangle(a: int, do_fill: bool = True) -> None:
     """ Draw a rectangle [-a, a] [-a, a] """
     assert 1 <= a <= 4
     if do_fill:
@@ -27,12 +28,12 @@ def displayRectangle(a: int, do_fill: bool = True):
         draw.rectangle((4 - a, 4 - a, 3 + a, 3 + a), outline="white", fill=fill_str)
 
 
-def displayLetter(letter: str = "A"):
+def displayLetter(letter: str = "A") -> None:
     with canvas(device) as draw:
         text(draw, (0, 0), letter, fill="white", font=proportional(CP437_FONT))
 
 
-def scrollToDisplayText(my_text: str = "Hello, Nice to meet you!"):
+def scrollToDisplayText(my_text: str = "Hello, Nice to meet you!") -> None:
     with canvas(virtual) as draw:
         text(draw, (0, 0), my_text, fill="white", font=proportional(CP437_FONT))
     for offset in range(150):
@@ -40,7 +41,7 @@ def scrollToDisplayText(my_text: str = "Hello, Nice to meet you!"):
         time.sleep(0.1)
 
 
-def arrowUp(move: int = 0, h: int = -1):
+def arrowUp(move: int = 0, h: int = -1) -> None:
     with canvas(device) as draw:
         draw.line((2, 0 + move, 2, 4 + move), fill=1)
         draw.line((2, 0 + move, 0, 2 + move), fill=1)
@@ -49,7 +50,7 @@ def arrowUp(move: int = 0, h: int = -1):
             draw.line((7, 7, 7, 7 - h), fill=1)
 
 
-def arrowDown(move: int = 0, h: int = -1):
+def arrowDown(move: int = 0, h: int = -1) -> None:
     with canvas(device) as draw:
         draw.line((2, 4 + move, 2, 0 + move), fill=1)
         draw.line((2, 4 + move, 0, 2 + move), fill=1)
@@ -58,7 +59,7 @@ def arrowDown(move: int = 0, h: int = -1):
             draw.line((7, 7, 7, 7 - h), fill=1)
 
 
-def notMoving(move: int = 0, h: int = -1):
+def notMoving(move: int = 0, h: int = -1) -> None:
     with canvas(device) as draw:
         draw.line((0 + move, 2, 4 + move, 2), fill=1)
         draw.line((0 + move, 4, 4 + move, 4), fill=1)
@@ -66,14 +67,14 @@ def notMoving(move: int = 0, h: int = -1):
             draw.line((7, 7, 7, 7 - h), fill=1)
 
 
-def startUp():
+def startUp() -> None:
     for i in range(8):
         with canvas(device) as draw:
             draw.rectangle( (1, 7-i, 6, 7), outline="white", fill="white")
         time.sleep(float(i)/20.0+0.05)
 
 
-def shutDown():
+def shutDown() -> None:
     for i in range(8):
         with canvas(device) as draw:
             draw.rectangle( (1, i, 6, 7), outline="white", fill="white")
@@ -81,11 +82,11 @@ def shutDown():
     device.clear()  # Turns off all LEDs
 
 
-def ledsOff():
+def ledsOff() -> None:
     device.clear()  # Turns off all LEDs
 
 
-def main():
+def main() -> None:
     while True:
         # scrollToDisplayText("Welcome to ATHENA-rod")
         startUp()
@@ -105,7 +106,7 @@ def main():
         time.sleep(.5)
 
 
-def exit_main():
+def exit_main() -> None:
     pass
 
 
