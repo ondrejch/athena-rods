@@ -7,7 +7,7 @@ from typing import Callable, Optional, List, Tuple, Any
 import numpy as np
 import time
 import threading
-from solver import PointKineticsEquationSolver
+from arod_instrument.solver import PointKineticsEquationSolver
 
 
 class ReactorPowerCalculator(threading.Thread):
