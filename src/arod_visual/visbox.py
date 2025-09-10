@@ -11,7 +11,6 @@ import queue
 import datetime
 import json
 import os
-import ssl
 from typing import List, Dict, Any, Tuple, Optional, Union
 
 from dash import Dash, dcc, html, Input, Output, State, no_update, ctx

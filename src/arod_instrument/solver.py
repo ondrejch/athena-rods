@@ -33,8 +33,8 @@ class PointKineticsEquationSolver:
         - Initializes the neutron density and delayed neutron precursor concentrations at steady-state.
         - Uses Runge-Kutta method (RK45) for solving differential equations.
         - Offers plotting options for analyzing neuron density, precursor concentrations, and source contribution with optional logging in visual representations."""
-    def __init__(self, reactivity_func: Callable[[float], float], 
-                 source_func: Optional[Callable[[float], float]] = None, 
+    def __init__(self, reactivity_func: Callable[[float], float],
+                 source_func: Optional[Callable[[float], float]] = None,
                  params: Optional[Dict[str, Any]] = None) -> None:
         """ Nuclear reactor point kinetics analyzer with modular plotting
         Args:
@@ -60,8 +60,8 @@ class PointKineticsEquationSolver:
         if len(self.params['beta']) != len(self.params['lambda_']) or len(self.params['beta']) < 1:
             raise ValueError("Beta and lambda arrays must have equal length")
 
-    def solve(self, t_span: Tuple[float, float] = (0, 10), 
-              t_eval: Optional[np.ndarray] = None, 
+    def solve(self, t_span: Tuple[float, float] = (0, 10),
+              t_eval: Optional[np.ndarray] = None,
               y0_override: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray]:
         """Solve the point kinetics equations"""
         beta = self.params['beta']
@@ -84,7 +84,7 @@ class PointKineticsEquationSolver:
                 - y (list): Contains neutron density and concentrations of delayed neutron precursors.
             Returns:
                 - list: A list comprising the rate of change of neutron density followed by the rates of change of each precursor concentration."""
-            n: float = y[0]
+            n: float = float(y[0])
             C: np.ndarray = np.array(y[1:])  # vectorize precursor concentrations
             rho: float = self.reactivity_func(t)       # External reactivity
             Q: float = self.source_func(t)             # External neutron source
@@ -100,7 +100,7 @@ class PointKineticsEquationSolver:
         # print("**** SOLUTION: ", self.solution)
         return self.solution.t, self.solution.y
 
-    def plot_neutron_density(self, figsize: Tuple[int, int] = (8, 4), 
+    def plot_neutron_density(self, figsize: Tuple[int, int] = (8, 4),
                             logscale: bool = True, **plot_kwargs: Any) -> Tuple[Any, Any]:
         """ Plot neutron density temporal evolution
         Args:
@@ -118,7 +118,7 @@ class PointKineticsEquationSolver:
         ax.grid(True, which='both' if logscale else 'major', alpha=0.4)
         return fig, ax
 
-    def plot_precursors(self, groups: Union[str, List[int]] = 'all', 
+    def plot_precursors(self, groups: Union[str, List[int]] = 'all',
                        figsize: Tuple[int, int] = (10, 6), **plot_kwargs: Any) -> Tuple[Any, Any]:
         """ Plot precursor group concentrations
         Args:

@@ -21,8 +21,8 @@ class ReactorPowerCalculator(threading.Thread):
         - Simulation calculates neutron density over the specified time, dependent on reactor reactivity.
         - Results are stored as time, reactivity, and neutron density.
         - Maintains real-time pacing by sleeping for the precise required duration. """
-    def __init__(self, get_reactivity: Callable[[], float], dt: float = 0.1, 
-                 duration: Optional[float] = None, update_event: Optional[threading.Event] = None, 
+    def __init__(self, get_reactivity: Callable[[], float], dt: float = 0.1,
+                 duration: Optional[float] = None, update_event: Optional[threading.Event] = None,
                  explosion_event: Optional[threading.Event] = None) -> None:
         """Initializes an instance of a class to manage reactor kinetics simulation.
         Parameters:
@@ -97,8 +97,8 @@ class ReactorPowerCalculator(threading.Thread):
             self.solver.reactivity_func = lambda t: rho
 
             # Solve equations for this time step
-            sol: Tuple[np.ndarray, np.ndarray] = self.solver.solve(t_span=(t_current, t_current + self.dt), t_eval=[t_current + self.dt],
-                                    y0_override=state)
+            sol: Tuple[np.ndarray, np.ndarray] = self.solver.solve(t_span=(t_current, t_current + self.dt),
+                                    t_eval=np.array([t_current + self.dt]), y0_override=state)
             # print("SOL: ", sol)
             state = sol[1].flatten()
             # print("STATE: ", state)
@@ -110,7 +110,7 @@ class ReactorPowerCalculator(threading.Thread):
                 C0 = beta / (lambda_ * Lambda) * n0
                 state = np.concatenate(([n0], C0))
 
-            neutron_density: float = state[0]
+            neutron_density: float = float(state[0])
 
             current_time: float = time.time() - start_time
             if self.DEBUG > 2:
@@ -128,7 +128,7 @@ class ReactorPowerCalculator(threading.Thread):
             t_current += self.dt
             elapsed = time.time() - start_time - t_current
             # print("Timing: ", elapsed, time.time(), start_time, t_current)
-            time.sleep(max(0, self.dt - elapsed))
+            time.sleep(max(0.0, self.dt - elapsed))
 
     def stop(self) -> None:
         self.stop_event.set()
