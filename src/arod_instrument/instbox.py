@@ -4,6 +4,7 @@ Main loop for the instrumentation box RPi5
 Ondrej Chvala <ochvala@utexas.edu>
 """
 
+from typing import Optional, Any, Dict, Tuple
 import logging
 import queue
 import time
@@ -41,12 +42,12 @@ ctrl_socket = SocketManager(
 )
 
 # Communication queues
-ctrl_status_q = queue.Queue(maxsize=100)  # Limit size to prevent memory issues
-stop_event = threading.Event()
-current = threading.current_thread()
+ctrl_status_q: queue.Queue[Dict[str, Any]] = queue.Queue(maxsize=100)  # Limit size to prevent memory issues
+stop_event: threading.Event = threading.Event()
+current: threading.Thread = threading.current_thread()
 
 
-def limit_switch_pressed():
+def limit_switch_pressed() -> None:
     """Handler for when limit switch is pressed"""
     motor.stop()
     switch_msg = {"type": "limit_switch", "value": "pressed"}
@@ -54,9 +55,9 @@ def limit_switch_pressed():
     logger.info("Limit switch pressed, motor stopped")
 
 
-def limit_switch_released():
+def limit_switch_released() -> None:
     """Handler for when limit switch is released"""
-    switch_msg = {"type": "limit_switch", "value": "released"}
+    switch_msg: Dict[str, str] = {"type": "limit_switch", "value": "released"}
     ctrl_socket.send_json(switch_msg)
     logger.info("Limit switch released")
 
@@ -66,7 +67,7 @@ limit_switch.when_pressed = limit_switch_pressed
 limit_switch.when_released = limit_switch_released
 
 
-def rod_protection(cr_reactivity):
+def rod_protection(cr_reactivity: 'Reactivity') -> None:
     """ Continuously checks rod distance and stops motor if overextended """
     while not stop_event.is_set():
         try:
@@ -85,7 +86,7 @@ def rod_protection(cr_reactivity):
             stop_event.wait(timeout=1)
 
 
-def process_ctrl_status():
+def process_ctrl_status() -> None:
     """Process control messages from the queue"""
     while not stop_event.is_set():
         try:
@@ -142,7 +143,7 @@ def process_ctrl_status():
         time.sleep(0.01)
 
 
-def rod_lift():
+def rod_lift() -> None:
     """ Temporarily overwrites limit switch to lift the rod reliably """
     try:
         rod_engage()
@@ -161,7 +162,7 @@ def rod_lift():
 
 class Reactivity:
     """ Control rod reactivity class """
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.cr_min: float = 5.0  # Rod minimum controlled position [cm]
         self.cr_max: float = 15.0  # Rod maximum controlled position [cm]
@@ -192,7 +193,7 @@ class Reactivity:
             return 0.0  # Safe default
 
 
-def set_speed_of_sound():
+def set_speed_of_sound() -> Optional[float]:
     """Checks temperature and humidity, and updates sonar's speed of sound in air"""
     my_speed_of_sound: float = -999.9
     retry_count = 0
@@ -220,7 +221,7 @@ def set_speed_of_sound():
     return True
 
 
-def update_speed_of_sound(wait: float = 10 * 60):
+def update_speed_of_sound(wait: float = 10 * 60) -> None:
     """Periodically update the speed of sound based on temperature and humidity"""
     while not stop_event.is_set():
         try:
@@ -234,7 +235,7 @@ def update_speed_of_sound(wait: float = 10 * 60):
             stop_event.wait(timeout=60)
 
 
-def ctrl_receiver():
+def ctrl_receiver() -> None:
     """Receive and process control messages"""
     while not stop_event.is_set():
         try:
@@ -266,7 +267,7 @@ def ctrl_receiver():
             stop_event.wait(timeout=1)
 
 
-def stream_sender(cr_reactivity, update_event):
+def stream_sender(cr_reactivity: Reactivity, update_event: threading.Event) -> None:
     """Send stream data to control box"""
     global power_calculator
     counter: int = 0
@@ -302,7 +303,7 @@ def stream_sender(cr_reactivity, update_event):
             stop_event.wait(timeout=1)
 
 
-def matrix_led_driver(cr_reactivity, explosion_event):
+def matrix_led_driver(cr_reactivity: Reactivity, explosion_event: threading.Event) -> None:
     """ Driver for matrix LED display; both motor and stop_event are global scope """
     from matrixled import arrowUp, arrowDown, notMoving, displayRectangle
     from matrixled import startUp as matrix_led_start_up
@@ -365,7 +366,7 @@ def matrix_led_driver(cr_reactivity, explosion_event):
     matrix_led_shut_down()
 
 
-def main():
+def main() -> None:
     """Main function that initializes all components and starts threads"""
     # Start speed of sound update thread
     threading.Thread(target=update_speed_of_sound, daemon=True).start()

@@ -3,6 +3,7 @@ PKE solver for ATHENA-rors. Tracks power in real time.
 Ondrej Chvala <ochvala@utexas.edu>
 """
 
+from typing import Callable, Optional, List, Tuple, Any
 import numpy as np
 import time
 import threading
@@ -20,7 +21,9 @@ class ReactorPowerCalculator(threading.Thread):
         - Simulation calculates neutron density over the specified time, dependent on reactor reactivity.
         - Results are stored as time, reactivity, and neutron density.
         - Maintains real-time pacing by sleeping for the precise required duration. """
-    def __init__(self, get_reactivity, dt=0.1, duration=None, update_event=None, explosion_event=None):
+    def __init__(self, get_reactivity: Callable[[], float], dt: float = 0.1, 
+                 duration: Optional[float] = None, update_event: Optional[threading.Event] = None, 
+                 explosion_event: Optional[threading.Event] = None) -> None:
         """Initializes an instance of a class to manage reactor kinetics simulation.
         Parameters:
             - get_reactivity (callable): A function that returns the reactivity at a given time.
@@ -29,25 +32,25 @@ class ReactorPowerCalculator(threading.Thread):
         Returns:
             - None: This is an initializer and does not return a value."""
         super().__init__()
-        self.get_reactivity = get_reactivity
-        self.dt = dt
-        self.duration = duration
-        self.stop_event = threading.Event()
-        self.explosion_event = explosion_event
-        self.results = []  # To store time, reactivity, power
+        self.get_reactivity: Callable[[], float] = get_reactivity
+        self.dt: float = dt
+        self.duration: Optional[float] = duration
+        self.stop_event: threading.Event = threading.Event()
+        self.explosion_event: Optional[threading.Event] = explosion_event
+        self.results: List[Tuple[float, float, float]] = []  # To store time, reactivity, power
         # Initialize solver with dummy reactivity function; will update each step
         self.source_strength: float = 0.0  # Added source strength parameter
-        self.solver = PointKineticsEquationSolver(
+        self.solver: PointKineticsEquationSolver = PointKineticsEquationSolver(
             lambda t: 0.0,
             source_func=lambda t: self.source_strength  # Use the class attribute for source
         )
         self.current_neutron_density: float = 1.0
         self.MAX_REACTOR_POWER: float = 1e30
         self.current_rho: float = 0.0
-        self.update_event = update_event  # New event for signaling updates
+        self.update_event: Optional[threading.Event] = update_event  # New event for signaling updates
         self.DEBUG: int = 0
 
-    def set_source(self, strength):
+    def set_source(self, strength: float) -> None:
         """Set the external neutron source strength
 
         Args:
@@ -55,7 +58,7 @@ class ReactorPowerCalculator(threading.Thread):
         """
         self.source_strength = strength  # No need to update solver.source_func since it references self.source_strength
 
-    def run(self):
+    def run(self) -> None:
         """Execute a time-dependent simulation of neutron density in nuclear reactor kinetics.
         Parameters:
             None
@@ -94,7 +97,7 @@ class ReactorPowerCalculator(threading.Thread):
             self.solver.reactivity_func = lambda t: rho
 
             # Solve equations for this time step
-            sol = self.solver.solve(t_span=(t_current, t_current + self.dt), t_eval=[t_current + self.dt],
+            sol: Tuple[np.ndarray, np.ndarray] = self.solver.solve(t_span=(t_current, t_current + self.dt), t_eval=[t_current + self.dt],
                                     y0_override=state)
             # print("SOL: ", sol)
             state = sol[1].flatten()
@@ -107,9 +110,9 @@ class ReactorPowerCalculator(threading.Thread):
                 C0 = beta / (lambda_ * Lambda) * n0
                 state = np.concatenate(([n0], C0))
 
-            neutron_density = state[0]
+            neutron_density: float = state[0]
 
-            current_time = time.time() - start_time
+            current_time: float = time.time() - start_time
             if self.DEBUG > 2:
                 print(f"{current_time:.2f}\t{rho/beta_total:.6f}\t{neutron_density:.6f}")
 
@@ -127,7 +130,7 @@ class ReactorPowerCalculator(threading.Thread):
             # print("Timing: ", elapsed, time.time(), start_time, t_current)
             time.sleep(max(0, self.dt - elapsed))
 
-    def stop(self):
+    def stop(self) -> None:
         self.stop_event.set()
 
 
