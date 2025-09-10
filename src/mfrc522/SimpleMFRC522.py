@@ -5,7 +5,7 @@ Adopted from https://github.com/Dennis-89/MFRC522-python-SimpleMFRC522.git
 """
 
 from typing import Tuple, Optional, List, Dict, Any
-from . import MFRC522
+from .MFRC522 import MFRC522
 from itertools import chain
 
 DEFAULT_KEYS: List[int] = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]
@@ -23,7 +23,7 @@ class SimpleMFRC522:
     BLOCK_ADDRESSES: List[int] = [8, 9, 10]
 
     def __init__(self) -> None:
-        self.reader: MFRC522.MFRC522 = MFRC522.MFRC522()
+        self.reader: MFRC522 = MFRC522()
 
     def read(self) -> Tuple[Optional[int], Optional[str]]:
         while True:
