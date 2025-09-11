@@ -1,4 +1,0 @@
-arod_control
-arod_instrument
-arod_visual
-mfrc522
