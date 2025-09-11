@@ -21,7 +21,7 @@ from arod_control.socket_utils import StreamingPacket  # For packet size (now 4 
 from arod_control import speak
 
 CERT_DIR: str = os.path.join(os.path.expanduser("~"), AUTH_ETC_PATH, "certs")  # Where the SSL certificates are
-FAKE_FACE_AUTH: bool = False # True  # FAKE face authorization, use for development only!!
+FAKE_FACE_AUTH: bool = True  # FAKE face authorization, use for development only!!
 CB_STATE: Dict[str, Any] = {  # Control box machine state
     'auth': {       # Authorization status
         'face': '',
@@ -38,6 +38,11 @@ CB_STATE: Dict[str, Any] = {  # Control box machine state
     'message': {
         'text': '',     # Text to show
         'timer': 2      # for how long [s]
+    },
+    'controls': {
+        'motor_set': 0,
+        'servo_set': 1,
+        'source_set': 0,
     }
 }
 
@@ -365,6 +370,10 @@ def forward_ctrl(src_key: str, dst_key: str) -> None:
                     # Validate JSON and check for commands for the speaker
                     msg = json.loads(line.decode('utf-8'))
                     if src_key == "ctrl_display" and msg.get("type") == "settings":
+                        # Update global state and queue for speaker
+                        for key in ["motor_set", "servo_set", "source_set"]:
+                            if key in msg:
+                                CB_STATE['controls'][key] = msg[key]
                         try:
                             ctrl_speak_q.put_nowait(msg)
                         except queue.Full:
@@ -456,6 +465,7 @@ def run_auth() -> None:
     rfid_auth = RFID_Authorization()
     face_auth = FaceAuthorization()
     logger.info('Authorization thread initialized')
+    last_face_auth = ''
 
     while not stop_event.is_set():
         if not CB_STATE['auth']['face']:  # 1. Wait for face authorization
@@ -464,7 +474,6 @@ def run_auth() -> None:
                 if detected_name in APPROVED_USER_NAMES:
                     CB_STATE['auth']['face'] = detected_name
                     logger.info(f'Authorization: authorized user {detected_name} by face')
-                    speak.say_welcome(detected_name)
                 else:
                     if stop_event.wait(timeout=2):  # Wait with early exit
                         return
@@ -473,7 +482,15 @@ def run_auth() -> None:
                 detected_name = APPROVED_USER_NAMES[0]
                 CB_STATE['auth']['face'] = detected_name
                 logger.info(f'FAKE Authorization: authorized user {detected_name} by face')
-                speak.say_welcome()
+
+        # Queue welcome message if face auth has changed
+        if CB_STATE['auth']['face'] and CB_STATE['auth']['face'] != last_face_auth:
+            try:
+                auth_msg = {'type': 'auth_success', 'name': CB_STATE['auth']['face']}
+                ctrl_speak_q.put_nowait(auth_msg)
+            except queue.Full:
+                logger.warning("Speaker queue is full, dropping auth welcome message.")
+            last_face_auth = CB_STATE['auth']['face']
 
         CB_STATE['message']['text'] = f"Authorized user\n{CB_STATE['auth']['face']}"
         CB_STATE['message']['timer'] = 5
@@ -525,47 +542,57 @@ def run_auth() -> None:
             CB_STATE['auth']['face'] = ''
             CB_STATE['auth']['rfid'] = ''
             CB_STATE['auth']['disp'] = False
+            last_face_auth = '' # Reset for next authorization
             logger.info("Authorization: RFID re-authorization failed, resetting to unauthorized!")
 
 
 def run_speaker() -> None:
     """Thread that consumes control messages and uses TTS to announce them."""
     logger.info('Speaker thread initialized')
-    last_state = {}
+    last_announced_state = CB_STATE['controls'].copy()
 
     while not stop_event.is_set():
         try:
+            # Block until a message is received
             msg = ctrl_speak_q.get(timeout=1.0)
             logger.debug(f"Speaker received message: {msg}")
 
-            # --- Motor Control ---
-            motor_set = msg.get("motor_set")
-            if motor_set is not None and motor_set != last_state.get("motor_set"):
-                if motor_set == 1:
-                    speak.say_motor_up()
-                elif motor_set == -1:
-                    speak.say_motor_down()
-                elif motor_set == 0:
-                    speak.say_motor_stop()
-                last_state["motor_set"] = motor_set
+            msg_type = msg.get("type")
 
-            # --- Servo Control ---
-            servo_set = msg.get("servo_set")
-            if servo_set is not None and servo_set != last_state.get("servo_set"):
-                if servo_set == 1:
-                    speak.servo_engage()
-                elif servo_set == 0:
-                    speak.servo_disengage()
-                last_state["servo_set"] = servo_set
+            if msg_type == 'auth_success':
+                user_name = msg.get('name')
+                if user_name:
+                    speak.say_welcome(user_name)
 
-            # --- Source Control ---
-            source_set = msg.get("source_set")
-            if source_set is not None and source_set != last_state.get("source_set"):
-                if source_set == 1:
-                    speak.source_in()
-                elif source_set == 0:
-                    speak.source_out()
-                last_state["source_set"] = source_set
+            elif msg_type == 'settings':
+                # --- Motor Control ---
+                motor_set = CB_STATE['controls'].get("motor_set")
+                if motor_set is not None and motor_set != last_announced_state.get("motor_set"):
+                    if motor_set == 1:
+                        speak.say_motor_up()
+                    elif motor_set == -1:
+                        speak.say_motor_down()
+                    elif motor_set == 0:
+                        speak.say_motor_stop()
+                    last_announced_state["motor_set"] = motor_set
+
+                # --- Servo Control ---
+                servo_set = CB_STATE['controls'].get("servo_set")
+                if servo_set is not None and servo_set != last_announced_state.get("servo_set"):
+                    if servo_set == 1:
+                        speak.servo_engage()
+                    elif servo_set == 0:
+                        speak.servo_disengage()
+                    last_announced_state["servo_set"] = servo_set
+
+                # --- Source Control ---
+                source_set = CB_STATE['controls'].get("source_set")
+                if source_set is not None and source_set != last_announced_state.get("source_set"):
+                    if source_set == 1:
+                        speak.source_in()
+                    elif source_set == 0:
+                        speak.source_out()
+                    last_announced_state["source_set"] = source_set
 
             ctrl_speak_q.task_done()
 
