@@ -8,11 +8,11 @@ VOICE_EN: str = 'voice_cmu_us_ljm_cg'
 VOICE_CZ: str = 'voice_czech_krb'
 
 
-def run_tts(say_bytes) -> None:
-    """
-         Args:Runs festival
+def run_tts(say_bytes: bytes) -> None:
+    """ Runs Festival Test To Speech engine
+         Args:
                 say_bytes: input bytes to festival
-        """
+    """
     print(say_bytes)
     process = subprocess.Popen(['festival', '--pipe'], stdin=subprocess.PIPE)
     process.communicate(input=say_bytes)
