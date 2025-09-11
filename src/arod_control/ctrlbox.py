@@ -63,6 +63,7 @@ servers: Dict[str, Any] = {
 stop_event: threading.Event = threading.Event()  # Global event for clean shutdown
 ctrl_speak_q: queue.Queue[Dict[str, Any]] = queue.Queue(maxsize=10) # Queue for speaker thread
 
+
 def accept_stream_connections() -> None:
     """Accept connections on the stream server and route them based on handshake"""
     server_info = servers["stream"]
