@@ -82,7 +82,48 @@ Full hardware details and printable parts are in the hardware/ directory.
 
 ## Installation
 
-The recommended way to install is by using the pre-built Debian (`.deb`) packages from the [GitHub Releases page](https://github.com/ondrejch/athena-rods/releases).
+### Using pip with extras (Recommended)
+
+ATHENA-rods now uses a unified `setup.py` with extras for different environments:
+
+#### For Raspberry Pi (Control & Instrument Boxes)
+
+```bash
+# Install with RPI-specific dependencies
+pip install .[rpi]
+
+# Or for development install
+pip install -e .[rpi]
+```
+
+#### For the Visualization Box
+
+```bash
+# Install with visualization-specific dependencies  
+pip install .[vis]
+
+# Or for development install
+pip install -e .[vis]
+```
+
+#### System Dependencies
+
+**On Raspberry Pi**, you'll also need to install system packages:
+```bash
+sudo apt update
+sudo apt install -y python3-pip python3-numpy python3-scipy python3-opencv \
+    python3-gpiozero python3-smbus lm-sensors \
+    libopenblas0 libatlas-base-dev libcap-dev
+# For face_recognition (may require cmake, dlib, etc.)
+# sudo apt install -y cmake build-essential
+```
+
+**Enable hardware interfaces** using `sudo raspi-config`:
+- **Interface Options**: Enable SPI, I2C, and Camera.
+
+### Using pre-built Debian packages
+
+Pre-built Debian (`.deb`) packages are available from the [GitHub Releases page](https://github.com/ondrejch/athena-rods/releases).
 
 #### For Raspberry Pi (Control & Instrument Boxes)
 
@@ -92,8 +133,6 @@ The recommended way to install is by using the pre-built Debian (`.deb`) package
     # Example for version 0.1.2
     sudo apt install ./python3-athena-rods-rpi_0.1.2-1_all.deb
     ```
-3.  Enable required hardware interfaces using `sudo raspi-config`:
-    - **Interface Options**: Enable SPI, I2C, and Camera.
 
 #### For the Visualization Box (Ubuntu/Debian `x86_64`)
 
@@ -103,39 +142,6 @@ The recommended way to install is by using the pre-built Debian (`.deb`) package
     # Example for version 0.1.2
     sudo apt install ./python3-athena-rods-vis_0.1.2-1_all.deb
     ```
-
-### Alternative manual installation 
-
-On each Raspberry Pi (or your dev machine where applicable):
-
-1) System packages (examples, adjust as needed):
-```bash
-sudo apt update
-sudo apt install -y python3-pip python3-numpy python3-scipy python3-opencv \
-    python3-gpiozero python3-smbus lm-sensors \
-    libopenblas0 libatlas-base-dev libcap-dev
-# Optional for face_recognition (may require cmake, dlib, etc.)
-# sudo apt install -y cmake build-essential
-```
-
-2) Enable interfaces (on RPis):
-- raspi-config → Interface Options:
-  - Enable SPI (for MAX7219 LED and MFRC522 variants)
-  - Enable I2C (for LCD1602)
-  - Enable Camera (for face auth)
-
-3) Python dependencies:
-```bash
-pip3 install -r requirements.txt
-# or editable install
-pip3 install -e .
-```
-
-4) Optional helper:
-```bash
-# If provided, to install additional system deps:
-sudo ./setup.sh
-```
 
 ---
 
