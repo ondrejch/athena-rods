@@ -1,0 +1,16 @@
+numpy<2
+scipy
+
+[rpi]
+face_recognition
+gpiozero
+luma.led_matrix
+opencv-python
+picamera2
+python-sensors
+smbus2
+spidev
+
+[vis]
+dash
+plotly
