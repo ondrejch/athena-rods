@@ -21,7 +21,7 @@ from arod_control.socket_utils import StreamingPacket  # For packet size (now 4 
 from arod_control import speak
 
 CERT_DIR: str = os.path.join(os.path.expanduser("~"), AUTH_ETC_PATH, "certs")  # Where the SSL certificates are
-FAKE_FACE_AUTH: bool = True  # FAKE face authorization, use for development only!!
+FAKE_FACE_AUTH: bool = False # True  # FAKE face authorization, use for development only!!
 CB_STATE: Dict[str, Any] = {  # Control box machine state
     'auth': {       # Authorization status
         'face': '',
@@ -463,6 +463,7 @@ def run_auth() -> None:
                 if detected_name in APPROVED_USER_NAMES:
                     CB_STATE['auth']['face'] = detected_name
                     logger.info(f'Authorization: authorized user {detected_name} by face')
+                    speak.say_welcome(detected_name)
                 else:
                     if stop_event.wait(timeout=2):  # Wait with early exit
                         return
@@ -471,6 +472,7 @@ def run_auth() -> None:
                 detected_name = APPROVED_USER_NAMES[0]
                 CB_STATE['auth']['face'] = detected_name
                 logger.info(f'FAKE Authorization: authorized user {detected_name} by face')
+                speak.say_welcome()
 
         CB_STATE['message']['text'] = f"Authorized user\n{CB_STATE['auth']['face']}"
         CB_STATE['message']['timer'] = 5
