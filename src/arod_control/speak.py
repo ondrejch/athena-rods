@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""" Use festival to say commands """
+""" Use Festival TTS to say commands """
 
 import subprocess
 
