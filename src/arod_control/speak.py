@@ -40,12 +40,12 @@ def say_motor_down():
     run_tts(('(%s) (SayText "Drive motor down!")' % VOICE_EN).encode('utf-8'))
 
 
+def servo_disengage():
+    run_tts(('(%s) (SayText "Scramming the reactor!")' % VOICE_EN).encode('utf-8'))
+
+
 def servo_engage():
     run_tts(('(%s) (SayText "Engaging the drive!")' % VOICE_EN).encode('utf-8'))
-
-
-def servo_scram():
-    run_tts(('(%s) (SayText "Scramming the reactor!")' % VOICE_EN).encode('utf-8'))
 
 
 def source_in():

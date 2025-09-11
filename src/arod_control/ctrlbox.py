@@ -12,11 +12,13 @@ import socket
 import json
 import os
 import ssl
+import queue
 from arod_control.leds import LEDs
 from arod_control.display import Display
 from arod_control.authorization import RFID_Authorization, FaceAuthorization
 from arod_control import USE_SSL, AUTH_ETC_PATH, PORT_CTRL, PORT_STREAM  # Socket settings
 from arod_control.socket_utils import StreamingPacket  # For packet size (now 4 floats)
+from arod_control import speak
 
 CERT_DIR: str = os.path.join(os.path.expanduser("~"), AUTH_ETC_PATH, "certs")  # Where the SSL certificates are
 FAKE_FACE_AUTH: bool = True  # FAKE face authorization, use for development only!!
@@ -59,7 +61,7 @@ servers: Dict[str, Any] = {
     "ctrl": None
 }
 stop_event: threading.Event = threading.Event()  # Global event for clean shutdown
-
+ctrl_speak_q: queue.Queue[Dict[str, Any]] = queue.Queue(maxsize=10) # Queue for speaker thread
 
 def accept_stream_connections() -> None:
     """Accept connections on the stream server and route them based on handshake"""
@@ -359,8 +361,13 @@ def forward_ctrl(src_key: str, dst_key: str) -> None:
                     continue
 
                 try:
-                    # Validate JSON
-                    json.loads(line.decode('utf-8'))
+                    # Validate JSON and check for commands for the speaker
+                    msg = json.loads(line.decode('utf-8'))
+                    if src_key == "ctrl_display" and msg.get("type") == "settings":
+                        try:
+                            ctrl_speak_q.put_nowait(msg)
+                        except queue.Full:
+                            logger.warning("Speaker queue is full, dropping command.")
 
                     failed_dsts = []
                     for dst_sock in dst_socks:
@@ -518,6 +525,55 @@ def run_auth() -> None:
             logger.info("Authorization: RFID re-authorization failed, resetting to unauthorized!")
 
 
+def run_speaker() -> None:
+    """Thread that consumes control messages and uses TTS to announce them."""
+    logger.info('Speaker thread initialized')
+    last_state = {}
+
+    while not stop_event.is_set():
+        try:
+            msg = ctrl_speak_q.get(timeout=1.0)
+            logger.debug(f"Speaker received message: {msg}")
+
+            # --- Motor Control ---
+            motor_set = msg.get("motor_set")
+            if motor_set is not None and motor_set != last_state.get("motor_set"):
+                if motor_set == 1:
+                    speak.say_motor_up()
+                elif motor_set == -1:
+                    speak.say_motor_down()
+                elif motor_set == 0:
+                    speak.say_motor_stop()
+                last_state["motor_set"] = motor_set
+
+            # --- Servo Control ---
+            servo_set = msg.get("servo_set")
+            if servo_set is not None and servo_set != last_state.get("servo_set"):
+                if servo_set == 1:
+                    speak.servo_engage()
+                elif servo_set == 0:
+                    speak.servo_disengage()
+                last_state["servo_set"] = servo_set
+
+            # --- Source Control ---
+            source_set = msg.get("source_set")
+            if source_set is not None and source_set != last_state.get("source_set"):
+                if source_set == 1:
+                    speak.source_in()
+                elif source_set == 0:
+                    speak.source_out()
+                last_state["source_set"] = source_set
+
+            ctrl_speak_q.task_done()
+
+        except queue.Empty:
+            continue
+        except Exception as e:
+            logger.error(f"Error in speaker thread: {e}")
+            # Avoid tight loop on continuous errors
+            stop_event.wait(timeout=1.0)
+
+
 def setup_socket_servers() -> bool:
     """Initialize and configure socket servers with SSL/TLS support"""
     try:
@@ -596,6 +652,11 @@ def main_loop() -> None:
     auth_thread = threading.Thread(target=run_auth, daemon=True)
     auth_thread.start()
     threads.append(auth_thread)
+
+    # Speaker thread
+    speaker_thread = threading.Thread(target=run_speaker, daemon=True)
+    speaker_thread.start()
+    threads.append(speaker_thread)
 
     # Setup socket servers
     if not setup_socket_servers():
