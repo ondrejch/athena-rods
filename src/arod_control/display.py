@@ -25,9 +25,9 @@ class Display():
         LCD1602.write(0, 1, datetime.now().isoformat().ljust(16))
 
     def show_sensors(self) -> None:
-        load5: float = os.getloadavg()[2]
+        load1: float = os.getloadavg()[0]
         sens: Dict[str, Any] = get_sensors()
-        LCD1602.write(0, 0, f'L {load5:.2f}, {sens["fan1"]:.0f} rpm'.ljust(16))
+        LCD1602.write(0, 0, f'L {load1:.2f}, {sens["fan1"]:.0f} rpm'.ljust(16))
         LCD1602.write(0, 1, f'temp {sens["temp1"]:.1f} C'.ljust(16))
 
     def show_message(self, message: str) -> None:
