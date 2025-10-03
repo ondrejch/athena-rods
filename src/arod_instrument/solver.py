@@ -101,10 +101,12 @@ class PointKineticsEquationSolver:
         return self.solution.t, self.solution.y
 
     def plot_neutron_density(self, figsize: Tuple[int, int] = (8, 4),
-                            logscale: bool = True, **plot_kwargs: Any) -> Tuple[Any, Any]:
+                             logscale: bool = True, title: Optional[str] = None,
+                             **plot_kwargs: Any) -> Tuple[Any, Any]:
         """ Plot neutron density temporal evolution
         Args:
             logscale (bool): Use logarithmic y-axis
+            title (str, optional): Title for the plot.
             **plot_kwargs: Matplotlib styling options """
         if not self.solution:
             raise RuntimeError("Call solve() before plotting")
@@ -114,24 +116,30 @@ class PointKineticsEquationSolver:
         else:
             ax.plot(self.solution.t, self.solution.y[0], **plot_kwargs)
 
-        ax.set(xlabel='Time [s]', ylabel='Relative Neutron Density', title='Point Kinetics Neutron Density')
+        plot_title = title if title is not None else 'Point Kinetics Neutron Density'
+        ax.set(xlabel='Time [s]', ylabel='Relative Neutron Density', title=plot_title)
         ax.grid(True, which='both' if logscale else 'major', alpha=0.4)
         return fig, ax
 
     def plot_precursors(self, groups: Union[str, List[int]] = 'all',
-                       figsize: Tuple[int, int] = (10, 6), **plot_kwargs: Any) -> Tuple[Any, Any]:
+                        figsize: Tuple[int, int] = (10, 6), title: Optional[str] = None,
+                        **plot_kwargs: Any) -> Tuple[Any, Any]:
         """ Plot precursor group concentrations
         Args:
-            groups: List of group indices (0-based) or 'all' """
+            groups: List of group indices (0-based) or 'all'
+            title (str, optional): Title for the plot.
+            """
         if not self.solution:
             raise RuntimeError("Call solve() before plotting")
 
         fig, ax = plt.subplots(figsize=figsize)
         C = self.solution.y[1:]
-        groups = range(len(C)) if groups == 'all' else groups
-        for i in groups:
+        plot_groups = range(len(C)) if groups == 'all' else groups
+        for i in plot_groups:
             ax.plot(self.solution.t, C[i], label=f'Group {i + 1}', **plot_kwargs)
-        ax.set(xlabel='Time [s]', ylabel='Precursor Concentration', title='Delayed Neutron Precursors')
+
+        plot_title = title if title is not None else 'Delayed Neutron Precursors'
+        ax.set(xlabel='Time [s]', ylabel='Precursor Concentration', title=plot_title)
         ax.legend(loc='best')
         ax.grid(True, alpha=0.4)
         return fig, ax
@@ -184,7 +192,7 @@ class PointKineticsEquationSolver:
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.grid(True, linestyle='--', alpha=0.7)
 
-        plt.tight_layout()
+        # plt.tight_layout()
         # plt.show()
         return plt
 
@@ -235,7 +243,7 @@ class FuchsNordheimSolver:
             """
             P, T = y
             # Reactivity with temperature feedback
-            rho_t = self.rho0 - self.alpha_T * (T - self.T0)
+            rho_t = self.rho0 + self.alpha_T * (T - self.T0)
             # Prompt-only point kinetics equation
             dPdt = ((rho_t - self.beta_total) / self.Lambda) * P
             # Temperature increase from power
@@ -245,7 +253,8 @@ class FuchsNordheimSolver:
         self.solution = solve_ivp(equations, t_span, y0, method='RK45', t_eval=t_eval, rtol=1e-8, atol=1e-10)
         return self.solution.t, self.solution.y
 
-    def plot_power_and_temperature(self, figsize: Tuple[int, int] = (10, 6), **plot_kwargs: Any) -> Tuple[Any, Any]:
+    def plot_power_and_temperature(self, figsize: Tuple[int, int] = (10, 6),
+                                   title: Optional[str] = None, **plot_kwargs: Any) -> Tuple[Any, Any]:
         """ Plot the power and temperature over time. """
         if self.solution is None:
             raise RuntimeError("No solution available. Call solve() first.")
@@ -268,6 +277,7 @@ class FuchsNordheimSolver:
         ax2.plot(t, T, color=color, label='Temperature', **plot_kwargs)
         ax2.tick_params(axis='y', labelcolor=color)
 
-        fig.tight_layout()
-        plt.title('Fuchs-Nordheim Power and Temperature vs. Time')
+        # fig.tight_layout()
+        plot_title = title if title is not None else 'Fuchs-Nordheim Power and Temperature vs. Time'
+        plt.title(plot_title)
         return fig, (ax1, ax2)
