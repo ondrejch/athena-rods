@@ -187,3 +187,87 @@ class PointKineticsEquationSolver:
         plt.tight_layout()
         # plt.show()
         return plt
+
+
+class FuchsNordheimSolver:
+    """ Fuchs-Nordheim point kinetics model for rapid reactivity excursions.
+    This model is an approximation for super-prompt-critical accidents where
+    the effects of delayed neutrons and heat transfer are neglected during the
+    initial power burst. Reactivity is modeled with a negative temperature feedback.
+    Parameters:
+        - alpha_T (float): Temperature coefficient of reactivity [dk/K/°C].
+        - m_Cp (float): Product of core mass and specific heat capacity [J/°C].
+        - rho0 (float): Initial reactivity insertion [absolute, not in $].
+        - T0 (float): Initial temperature [°C].
+        - params (dict, optional): Reactor parameters including 'beta' and 'Lambda'.
+                                   Defaults to U-235 thermal parameters.
+    """
+    def __init__(self, alpha_T: float, m_Cp: float, rho0: float, T0: float = 20.0,
+                 params: Optional[Dict[str, Any]] = None) -> None:
+        if params is None:
+            params = thermal_default_params
+        self.params: Dict[str, Any] = params
+        self.Lambda: float = params['Lambda']
+        self.beta_total: float = np.sum(params['beta'])
+        self.alpha_T: float = alpha_T
+        self.m_Cp: float = m_Cp
+        self.rho0: float = rho0
+        self.T0: float = T0
+        self.solution: Optional[Any] = None
+
+    def solve(self, t_span: Tuple[float, float],
+              t_eval: Optional[np.ndarray] = None,
+              y0_override: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray]:
+        """ Solve the Fuchs-Nordheim equations.
+        The state vector y is [P, T], where P is power and T is temperature.
+        """
+        if y0_override is not None:
+            y0 = y0_override
+        else:
+            # Initial conditions: low initial power, initial temperature T0
+            P0 = 1.0e-10
+            y0 = np.array([P0, self.T0])
+
+        def equations(t: float, y: np.ndarray) -> np.ndarray:
+            """ System of ODEs for the Fuchs-Nordheim model.
+            y[0] = P (Power)
+            y[1] = T (Temperature)
+            """
+            P, T = y
+            # Reactivity with temperature feedback
+            rho_t = self.rho0 - self.alpha_T * (T - self.T0)
+            # Prompt-only point kinetics equation
+            dPdt = ((rho_t - self.beta_total) / self.Lambda) * P
+            # Temperature increase from power
+            dTdt = P / self.m_Cp
+            return np.array([dPdt, dTdt])
+
+        self.solution = solve_ivp(equations, t_span, y0, method='RK45', t_eval=t_eval, rtol=1e-8, atol=1e-10)
+        return self.solution.t, self.solution.y
+
+    def plot_power_and_temperature(self, figsize: Tuple[int, int] = (10, 6), **plot_kwargs: Any) -> Tuple[Any, Any]:
+        """ Plot the power and temperature over time. """
+        if self.solution is None:
+            raise RuntimeError("No solution available. Call solve() first.")
+        t = self.solution.t
+        P = self.solution.y[0]
+        T = self.solution.y[1]
+
+        fig, ax1 = plt.subplots(figsize=figsize)
+
+        color = 'tab:blue'
+        ax1.set_xlabel('Time [s]')
+        ax1.set_ylabel('Relative Power', color=color)
+        ax1.semilogy(t, P, color=color, label='Power', **plot_kwargs)
+        ax1.tick_params(axis='y', labelcolor=color)
+        ax1.grid(True, which='both', linestyle='--', alpha=0.7)
+
+        ax2 = ax1.twinx()
+        color = 'tab:red'
+        ax2.set_ylabel(f'Temperature [°C]', color=color)
+        ax2.plot(t, T, color=color, label='Temperature', **plot_kwargs)
+        ax2.tick_params(axis='y', labelcolor=color)
+
+        fig.tight_layout()
+        plt.title('Fuchs-Nordheim Power and Temperature vs. Time')
+        return fig, (ax1, ax2)
