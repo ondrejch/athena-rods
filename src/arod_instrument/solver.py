@@ -281,3 +281,108 @@ class FuchsNordheimSolver:
         plot_title = title if title is not None else 'Fuchs-Nordheim Power and Temperature vs. Time'
         plt.title(plot_title)
         return fig, (ax1, ax2)
+
+
+class PKEFuchsNordheimSolver(PointKineticsEquationSolver):
+    """
+    Solves the point kinetics equations with temperature feedback.
+    This combines the delayed neutron effects from PKE with the temperature
+    feedback model from Fuchs-Nordheim.
+    Parameters:
+        - alpha_T (float): Temperature coefficient of reactivity [dk/K/°C].
+        - m_Cp (float): Product of core mass and specific heat capacity [J/°C].
+        - rho0 (float): Initial reactivity insertion [absolute, not in $].
+        - T0 (float): Initial temperature [°C].
+        - params (dict, optional): Reactor parameters. Defaults to thermal params.
+    """
+    def __init__(self, alpha_T: float, m_Cp: float, rho0: float, T0: float = 20.0,
+                 params: Optional[Dict[str, Any]] = None,
+                 source_func: Optional[Callable[[float], float]] = None) -> None:
+        self.alpha_T = alpha_T
+        self.m_Cp = m_Cp
+        self.rho0 = rho0
+        self.T0 = T0
+
+        # The reactivity function is now internal and depends on temperature
+        def temp_feedback_reactivity(t: float, T: float) -> float:
+            return self.rho0 + self.alpha_T * (T - self.T0)
+        self._temp_feedback_reactivity = temp_feedback_reactivity
+
+        # Initialize the parent class, but we will override the ODE system
+        super().__init__(reactivity_func=lambda t: self.rho0, source_func=source_func, params=params)
+
+    def solve(self, t_span: Tuple[float, float],
+              t_eval: Optional[np.ndarray] = None,
+              y0_override: Optional[np.ndarray] = None) -> Tuple[np.ndarray, np.ndarray]:
+        """Solve the coupled PKE and temperature equations."""
+        beta_sum: float = self.beta_total
+        beta_div_Lambda = self.beta_div_Lambda
+        lambda_ = self.lambda_
+        Lambda = self.Lambda
+
+        if y0_override is not None:
+            y0 = y0_override
+        else:
+            # Initial conditions (steady-state for n and C, T0 for temp)
+            n0 = 1.0e-10  # Start from very low power
+            C0 = self.beta / (lambda_ * Lambda) * n0
+            # State vector is [n, C_1, ..., C_N, T]
+            y0 = np.concatenate(([n0], C0, [self.T0]))
+
+        def equations(t: float, y: np.ndarray) -> np.ndarray:
+            """Coupled ODEs for PKE with temperature feedback."""
+            n = float(y[0])
+            C = np.array(y[1:-1])  # Precursor concentrations
+            T = float(y[-1])       # Temperature
+
+            # Reactivity now depends on temperature
+            rho = self._temp_feedback_reactivity(t, T)
+            Q = self.source_func(t)
+
+            # PKE equations
+            prompt = (rho - beta_sum) / Lambda
+            delayed = np.dot(lambda_, C)
+            dndt = n * prompt + delayed + Q
+            dCdt = beta_div_Lambda * n - lambda_ * C
+
+            # Temperature equation
+            dTdt = n / self.m_Cp
+
+            return np.concatenate(([dndt], dCdt, [dTdt]))
+
+        self.solution = solve_ivp(equations, t_span, y0, method='RK45', t_eval=t_eval, rtol=1e-8, atol=1e-10)
+        return self.solution.t, self.solution.y
+
+    def get_temperature(self) -> Tuple[np.ndarray, np.ndarray]:
+        """Returns the time and core temperature from the solution."""
+        if self.solution is None:
+            raise RuntimeError("Solver has not been run yet.")
+        return self.solution.t, self.solution.y[-1]
+
+    def plot_power_and_temperature(self, figsize: Tuple[int, int] = (10, 6),
+                                   title: Optional[str] = None, **plot_kwargs: Any) -> Tuple[Any, Any]:
+        """ Plot the power (neutron density) and temperature over time. """
+        if self.solution is None:
+            raise RuntimeError("No solution available. Call solve() first.")
+        t = self.solution.t
+        P = self.solution.y[0]
+        T = self.solution.y[-1]
+
+        fig, ax1 = plt.subplots(figsize=figsize)
+
+        color = 'tab:blue'
+        ax1.set_xlabel('Time [s]')
+        ax1.set_ylabel('Relative Power', color=color)
+        ax1.semilogy(t, P, color=color, label='Power', **plot_kwargs)
+        ax1.tick_params(axis='y', labelcolor=color)
+        ax1.grid(True, which='both', linestyle='--', alpha=0.7)
+
+        ax2 = ax1.twinx()
+        color = 'tab:red'
+        ax2.set_ylabel(f'Temperature [°C]', color=color)
+        ax2.plot(t, T, color=color, label='Temperature', **plot_kwargs)
+        ax2.tick_params(axis='y', labelcolor=color)
+
+        plot_title = title if title is not None else 'PKE with Temperature Feedback'
+        plt.title(plot_title)
+        return fig, (ax1, ax2)
