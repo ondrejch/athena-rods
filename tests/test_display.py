@@ -27,7 +27,7 @@ class TestDisplay:
     def mock_lcd_init(self):
         """Mock LCD1602 initialization"""
         with patch.object(LCD1602, 'init') as mock_init, \
-             patch.object(LCD1602, 'write') as mock_write:
+              patch.object(LCD1602, 'write') as mock_write:
             yield mock_init, mock_write
 
     @pytest.fixture
@@ -87,8 +87,8 @@ class TestDisplay:
         # Verify sensor data display
         assert mock_write.call_count == 2
         
-        # Check actual format: f'L {load5:.2f}, {sens["fan1"]:.0f} rpm'.ljust(16)
-        expected_line1 = 'L 2.25, 2501 rpm'.ljust(16)
+        # Check actual format: f'L {load1:.2f}, {sens["fan1"]:.0f} rpm'.ljust(16)
+        expected_line1 = 'L 1.00, 2501 rpm'.ljust(16)
         mock_write.assert_any_call(0, 0, expected_line1)
         
         # Check second line: f'temp {sens["temp1"]:.1f} C'.ljust(16)
@@ -168,8 +168,8 @@ class TestDisplay:
             with patch('os.getloadavg', return_value=[10.0, 15.0, 99.99]):
                 display.show_sensors()
         
-        # Check formatting: f'L {load5:.2f}, {sens["fan1"]:.0f} rpm'.ljust(16)
-        expected_line1 = 'L 99.99, 10000 rpm'.ljust(16)
+        # Check formatting: f'L {load1:.2f}, {sens["fan1"]:.0f} rpm'.ljust(16)
+        expected_line1 = 'L 10.00, 10000 rpm'.ljust(16)
         expected_line2 = 'temp 100.0 C'.ljust(16)  # Rounded to 100.0
         mock_write.assert_any_call(0, 0, expected_line1)
         mock_write.assert_any_call(0, 1, expected_line2)
