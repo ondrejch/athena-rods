@@ -13,16 +13,16 @@ thermal_default_params: Dict[str, Any] = {
     'beta': np.array([0.000215, 0.00142, 0.00127, 0.00257, 0.00075, 0.00027]),
     'lambda_': np.array([0.0126, 0.0337, 0.139, 0.325, 1.13, 2.50]),
     'Lambda': 5e-4,
-    'fission_energy': 3.2e-11,  # J/fission (U-235 thermal)
-    'nu': 2.43  # neutrons/fission (U-235 thermal)
+    'fission_energy': 3.2e-11,  # J per fission
+    'nu': 2.43  # neutrons per fission
 }
 
 fast_reactor_params: Dict[str, Any] = {
     'beta': np.array([0.00022, 0.00142, 0.00127, 0.00257, 0.00075, 0.00027]),
     'lambda_': np.array([0.0126, 0.0337, 0.139, 0.325, 1.13, 2.50]),
     'Lambda': 1e-7,
-    'fission_energy': 3.2e-11,  # J/fission (U-235, similar for fast)
-    'nu': 2.43  # neutrons/fission (U-235, similar for fast)
+    'fission_energy': 3.2e-11,  # J per fission
+    'nu': 2.43  # neutrons per fission
 }
 
 
@@ -314,10 +314,11 @@ class PKEFuchsNordheimSolver(PointKineticsEquationSolver):
 
         # Initialize the parent class, but we will override the ODE system
         super().__init__(reactivity_func=lambda t: self.rho0, source_func=source_func, params=params)
-        
-        # Read fission_energy and nu parameters
+
+        # Additional parameters for power tracking
         self.fission_energy = self.params.get('fission_energy', 3.2e-11)
         self.nu = self.params.get('nu', 2.43)
+        self.initial_power = self.params.get('initial_power', 1.0e-10)  # Initial power in watts
 
     def solve(self, t_span: Tuple[float, float],
               t_eval: Optional[np.ndarray] = None,
@@ -331,12 +332,12 @@ class PKEFuchsNordheimSolver(PointKineticsEquationSolver):
         if y0_override is not None:
             y0 = y0_override
         else:
-            # Initial conditions (steady-state for n and C, P0 and T0)
-            n0 = 1.0e-10  # Start from very low power
+            # Initial conditions: n0 scaled from initial_power, C0 based on n0, P0 = initial_power, T0
+            n0 = self.initial_power / (self.fission_energy / self.nu)
+            P0 = self.initial_power
             C0 = self.beta / (lambda_ * Lambda) * n0
-            P0 = n0 * (self.fission_energy / self.nu)
             # State vector is [n, P, C_1, ..., C_N, T]
-            y0 = np.concatenate(([n0, P0], C0, [self.T0]))
+            y0 = np.concatenate(([n0], [P0], C0, [self.T0]))
 
         def equations(t: float, y: np.ndarray) -> np.ndarray:
             """Coupled ODEs for PKE with temperature feedback."""
@@ -359,7 +360,7 @@ class PKEFuchsNordheimSolver(PointKineticsEquationSolver):
             # Temperature equation
             dTdt = P / self.m_Cp
 
-            return np.concatenate(([dndt, dPdt], dCdt, [dTdt]))
+            return np.concatenate(([dndt], [dPdt], dCdt, [dTdt]))
 
         self.solution = solve_ivp(equations, t_span, y0, method='RK45', t_eval=t_eval, rtol=1e-8, atol=1e-10)
         return self.solution.t, self.solution.y
@@ -372,18 +373,18 @@ class PKEFuchsNordheimSolver(PointKineticsEquationSolver):
 
     def plot_power_and_temperature(self, figsize: Tuple[int, int] = (10, 6),
                                    title: Optional[str] = None, **plot_kwargs: Any) -> Tuple[Any, Any]:
-        """ Plot the power (neutron density) and temperature over time. """
+        """ Plot the power (in watts) and temperature over time. """
         if self.solution is None:
             raise RuntimeError("No solution available. Call solve() first.")
         t = self.solution.t
-        P = self.solution.y[1]  # Power is now at index 1
+        P = self.solution.y[1]
         T = self.solution.y[-1]
 
         fig, ax1 = plt.subplots(figsize=figsize)
 
         color = 'tab:blue'
         ax1.set_xlabel('Time [s]')
-        ax1.set_ylabel('Relative Power', color=color)
+        ax1.set_ylabel('Power [W]', color=color)
         ax1.semilogy(t, P, color=color, label='Power', **plot_kwargs)
         ax1.tick_params(axis='y', labelcolor=color)
         ax1.grid(True, which='both', linestyle='--', alpha=0.7)
@@ -397,3 +398,24 @@ class PKEFuchsNordheimSolver(PointKineticsEquationSolver):
         plot_title = title if title is not None else 'PKE with Temperature Feedback'
         plt.title(plot_title)
         return fig, (ax1, ax2)
+
+    def plot_neutron_density(self, figsize: Tuple[int, int] = (8, 4),
+                             logscale: bool = True, title: Optional[str] = None,
+                             **plot_kwargs: Any) -> Tuple[Any, Any]:
+        """ Plot neutron density temporal evolution
+        Args:
+            logscale (bool): Use logarithmic y-axis
+            title (str, optional): Title for the plot.
+            **plot_kwargs: Matplotlib styling options """
+        if not self.solution:
+            raise RuntimeError("Call solve() before plotting")
+        fig, ax = plt.subplots(figsize=figsize)
+        if logscale:
+            ax.semilogy(self.solution.t, self.solution.y[0], **plot_kwargs)
+        else:
+            ax.plot(self.solution.t, self.solution.y[0], **plot_kwargs)
+
+        plot_title = title if title is not None else 'Neutron Density'
+        ax.set(xlabel='Time [s]', ylabel='Neutron Density', title=plot_title)
+        ax.grid(True, which='both' if logscale else 'major', alpha=0.4)
+        return fig, ax
