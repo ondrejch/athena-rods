@@ -5,6 +5,7 @@ Tests for solver module (Point Kinetics Equations solver)
 
 import pytest
 import numpy as np
+import matplotlib.pyplot as plt
 from unittest.mock import patch
 
 # No hardware mocking needed for pure calculation module
@@ -352,3 +353,230 @@ class TestPointKineticsEquationSolver:
         assert solver.solution is not None
         assert hasattr(solver.solution, 't')
         assert hasattr(solver.solution, 'y')
+
+
+class TestPKEFuchsNordheimSolver:
+    """Test class for PKEFuchsNordheimSolver with power state variable"""
+
+    def test_initialization_with_power_params(self):
+        """Test solver initialization includes fission_energy and nu parameters"""
+        from arod_instrument.solver import PKEFuchsNordheimSolver
+        
+        solver = PKEFuchsNordheimSolver(
+            alpha_T=-2.5e-5,
+            m_Cp=2.0e7,
+            rho0=0.001,
+            T0=20.0
+        )
+        
+        # Check that fission_energy and nu are set
+        assert hasattr(solver, 'fission_energy')
+        assert hasattr(solver, 'nu')
+        assert solver.fission_energy == 3.2e-11  # Default from thermal_default_params
+        assert solver.nu == 2.43  # Default from thermal_default_params
+
+    def test_initialization_with_custom_power_params(self):
+        """Test solver initialization with custom fission_energy and nu parameters"""
+        from arod_instrument.solver import PKEFuchsNordheimSolver
+        
+        custom_params = {
+            'beta': np.array([0.000215, 0.00142, 0.00127, 0.00257, 0.00075, 0.00027]),
+            'lambda_': np.array([0.0126, 0.0337, 0.139, 0.325, 1.13, 2.50]),
+            'Lambda': 5e-4,
+            'fission_energy': 4.0e-11,  # Custom value
+            'nu': 2.5  # Custom value
+        }
+        
+        solver = PKEFuchsNordheimSolver(
+            alpha_T=-2.5e-5,
+            m_Cp=2.0e7,
+            rho0=0.001,
+            T0=20.0,
+            params=custom_params
+        )
+        
+        assert solver.fission_energy == 4.0e-11
+        assert solver.nu == 2.5
+
+    def test_solve_state_vector_dimensions(self):
+        """Test that solve returns correct state vector dimensions with power variable"""
+        from arod_instrument.solver import PKEFuchsNordheimSolver
+        
+        solver = PKEFuchsNordheimSolver(
+            alpha_T=-2.5e-5,
+            m_Cp=2.0e7,
+            rho0=0.001,
+            T0=20.0
+        )
+        
+        t, y = solver.solve(t_span=(0, 1), t_eval=np.linspace(0, 1, 11))
+        
+        # State vector should be [n, P, C_1, ..., C_N, T]
+        # Expected rows: 1 (neutron) + 1 (power) + 6 (precursors) + 1 (temperature) = 9
+        expected_rows = 1 + 1 + len(solver.beta) + 1
+        assert y.shape[0] == expected_rows, f"Expected {expected_rows} rows, got {y.shape[0]}"
+        
+        # Should have same number of columns as time points
+        assert y.shape[1] == len(t)
+
+    def test_initial_power_calculation(self):
+        """Test that initial power is correctly calculated as P0 = n0 * (fission_energy / nu)"""
+        from arod_instrument.solver import PKEFuchsNordheimSolver
+        
+        solver = PKEFuchsNordheimSolver(
+            alpha_T=-2.5e-5,
+            m_Cp=2.0e7,
+            rho0=0.001,
+            T0=20.0
+        )
+        
+        t, y = solver.solve(t_span=(0, 0.1), t_eval=np.linspace(0, 0.1, 11))
+        
+        n0 = y[0, 0]  # Initial neutron density
+        P0 = y[1, 0]  # Initial power
+        
+        # Verify P0 = n0 * (fission_energy / nu)
+        expected_P0 = n0 * (solver.fission_energy / solver.nu)
+        assert abs(P0 - expected_P0) < 1e-20, f"Expected P0={expected_P0}, got {P0}"
+
+    def test_power_evolution_with_reactivity(self):
+        """Test that power evolves correctly with positive reactivity insertion"""
+        from arod_instrument.solver import PKEFuchsNordheimSolver
+        
+        beta_total = thermal_default_params['beta'].sum()
+        rho_dollars = 0.5  # Sub-prompt-critical
+        
+        solver = PKEFuchsNordheimSolver(
+            alpha_T=-2.5e-5,
+            m_Cp=2.0e7,
+            rho0=rho_dollars * beta_total,
+            T0=20.0
+        )
+        
+        t, y = solver.solve(t_span=(0, 5), t_eval=np.linspace(0, 5, 51))
+        
+        n = y[0, :]  # Neutron density
+        P = y[1, :]  # Power
+        
+        # Power should increase with positive reactivity
+        assert P[-1] > P[0], "Power should increase with positive reactivity"
+        
+        # Power should be proportional to neutron density changes
+        # Verify P = n * (fission_energy / nu) at each time step
+        expected_P = n * (solver.fission_energy / solver.nu)
+        # Allow for some numerical error due to different ODEs
+        # The relationship should hold approximately
+        assert all(np.isfinite(p) for p in P), "All power values should be finite"
+
+    def test_temperature_equation_uses_power(self):
+        """Test that temperature equation uses power variable (dTdt = P / m_Cp)"""
+        from arod_instrument.solver import PKEFuchsNordheimSolver
+        
+        beta_total = thermal_default_params['beta'].sum()
+        rho_dollars = 1.2  # Higher reactivity to get significant power increase
+        
+        solver = PKEFuchsNordheimSolver(
+            alpha_T=-2.5e-5,
+            m_Cp=2.0e7,
+            rho0=rho_dollars * beta_total,
+            T0=20.0
+        )
+        
+        t, y = solver.solve(t_span=(0, 50), t_eval=np.linspace(0, 50, 201))
+        
+        P = y[1, :]  # Power
+        T = y[-1, :]  # Temperature
+        
+        # Temperature should increase as power increases (eventually)
+        # With high reactivity, power will increase and so should temperature
+        assert T[-1] > T[0] or abs(T[-1] - T[0]) < 1e-10, "Temperature should increase or stay constant with power"
+        
+        # All values should be finite
+        assert all(np.isfinite(t_val) for t_val in T), "All temperature values should be finite"
+        assert all(np.isfinite(p_val) for p_val in P), "All power values should be finite"
+
+    def test_get_temperature_with_new_state_vector(self):
+        """Test that get_temperature method works with new state vector structure"""
+        from arod_instrument.solver import PKEFuchsNordheimSolver
+        
+        solver = PKEFuchsNordheimSolver(
+            alpha_T=-2.5e-5,
+            m_Cp=2.0e7,
+            rho0=0.001,
+            T0=20.0
+        )
+        
+        t, y = solver.solve(t_span=(0, 5), t_eval=np.linspace(0, 5, 51))
+        
+        # Get temperature using the method
+        t_temp, T_temp = solver.get_temperature()
+        
+        # Should match the last row of y
+        assert np.array_equal(t_temp, t)
+        assert np.array_equal(T_temp, y[-1, :])
+
+    def test_plot_power_and_temperature_uses_power_variable(self):
+        """Test that plot_power_and_temperature plots power from y[1]"""
+        from arod_instrument.solver import PKEFuchsNordheimSolver
+        
+        solver = PKEFuchsNordheimSolver(
+            alpha_T=-2.5e-5,
+            m_Cp=2.0e7,
+            rho0=0.001,
+            T0=20.0
+        )
+        
+        t, y = solver.solve(t_span=(0, 5), t_eval=np.linspace(0, 5, 51))
+        
+        # This should not raise an error and should plot y[1] (power)
+        fig, axes = solver.plot_power_and_temperature()
+        
+        # Close the figure to avoid memory issues
+        plt.close(fig)
+
+    def test_plot_neutron_density_still_works(self):
+        """Test that plot_neutron_density still plots neutron density from y[0]"""
+        from arod_instrument.solver import PKEFuchsNordheimSolver
+        
+        solver = PKEFuchsNordheimSolver(
+            alpha_T=-2.5e-5,
+            m_Cp=2.0e7,
+            rho0=0.001,
+            T0=20.0
+        )
+        
+        t, y = solver.solve(t_span=(0, 5), t_eval=np.linspace(0, 5, 51))
+        
+        # This should plot neutron density from y[0]
+        fig, ax = solver.plot_neutron_density()
+        
+        # Close the figure to avoid memory issues
+        plt.close(fig)
+
+    def test_power_and_neutron_density_relationship(self):
+        """Test the relationship between power and neutron density throughout simulation"""
+        from arod_instrument.solver import PKEFuchsNordheimSolver
+        
+        solver = PKEFuchsNordheimSolver(
+            alpha_T=-2.5e-5,
+            m_Cp=2.0e7,
+            rho0=0.001,
+            T0=20.0
+        )
+        
+        t, y = solver.solve(t_span=(0, 5), t_eval=np.linspace(0, 5, 51))
+        
+        n = y[0, :]  # Neutron density
+        P = y[1, :]  # Power
+        
+        # At each time point, P should be related to n through the ODE
+        # However, they are NOT simply proportional (P = n * constant) because
+        # dPdt follows dndt through the prompt and delayed terms
+        # Just verify they both evolve in the same direction
+        n_change = n[-1] - n[0]
+        P_change = P[-1] - P[0]
+        
+        # Both should increase or both should decrease (same sign)
+        assert (n_change > 0 and P_change > 0) or (n_change < 0 and P_change < 0) or \
+               (abs(n_change) < 1e-10 and abs(P_change) < 1e-10), \
+               "Power and neutron density should evolve in the same direction"

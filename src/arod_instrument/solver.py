@@ -12,13 +12,17 @@ import matplotlib.pyplot as plt
 thermal_default_params: Dict[str, Any] = {
     'beta': np.array([0.000215, 0.00142, 0.00127, 0.00257, 0.00075, 0.00027]),
     'lambda_': np.array([0.0126, 0.0337, 0.139, 0.325, 1.13, 2.50]),
-    'Lambda': 5e-4
+    'Lambda': 5e-4,
+    'fission_energy': 3.2e-11,  # J/fission (U-235 thermal)
+    'nu': 2.43  # neutrons/fission (U-235 thermal)
 }
 
 fast_reactor_params: Dict[str, Any] = {
     'beta': np.array([0.00022, 0.00142, 0.00127, 0.00257, 0.00075, 0.00027]),
     'lambda_': np.array([0.0126, 0.0337, 0.139, 0.325, 1.13, 2.50]),
-    'Lambda': 1e-7
+    'Lambda': 1e-7,
+    'fission_energy': 3.2e-11,  # J/fission (U-235, similar for fast)
+    'nu': 2.43  # neutrons/fission (U-235, similar for fast)
 }
 
 
@@ -310,6 +314,10 @@ class PKEFuchsNordheimSolver(PointKineticsEquationSolver):
 
         # Initialize the parent class, but we will override the ODE system
         super().__init__(reactivity_func=lambda t: self.rho0, source_func=source_func, params=params)
+        
+        # Read fission_energy and nu parameters
+        self.fission_energy = self.params.get('fission_energy', 3.2e-11)
+        self.nu = self.params.get('nu', 2.43)
 
     def solve(self, t_span: Tuple[float, float],
               t_eval: Optional[np.ndarray] = None,
@@ -323,16 +331,18 @@ class PKEFuchsNordheimSolver(PointKineticsEquationSolver):
         if y0_override is not None:
             y0 = y0_override
         else:
-            # Initial conditions (steady-state for n and C, T0 for temp)
+            # Initial conditions (steady-state for n and C, P0 and T0)
             n0 = 1.0e-10  # Start from very low power
             C0 = self.beta / (lambda_ * Lambda) * n0
-            # State vector is [n, C_1, ..., C_N, T]
-            y0 = np.concatenate(([n0], C0, [self.T0]))
+            P0 = n0 * (self.fission_energy / self.nu)
+            # State vector is [n, P, C_1, ..., C_N, T]
+            y0 = np.concatenate(([n0, P0], C0, [self.T0]))
 
         def equations(t: float, y: np.ndarray) -> np.ndarray:
             """Coupled ODEs for PKE with temperature feedback."""
             n = float(y[0])
-            C = np.array(y[1:-1])  # Precursor concentrations
+            P = float(y[1])
+            C = np.array(y[2:-1])  # Precursor concentrations
             T = float(y[-1])       # Temperature
 
             # Reactivity now depends on temperature
@@ -343,12 +353,13 @@ class PKEFuchsNordheimSolver(PointKineticsEquationSolver):
             prompt = (rho - beta_sum) / Lambda
             delayed = np.dot(lambda_, C)
             dndt = n * prompt + delayed + Q
+            dPdt = (self.fission_energy / self.nu) * (n * prompt + delayed)
             dCdt = beta_div_Lambda * n - lambda_ * C
 
             # Temperature equation
-            dTdt = n / self.m_Cp
+            dTdt = P / self.m_Cp
 
-            return np.concatenate(([dndt], dCdt, [dTdt]))
+            return np.concatenate(([dndt, dPdt], dCdt, [dTdt]))
 
         self.solution = solve_ivp(equations, t_span, y0, method='RK45', t_eval=t_eval, rtol=1e-8, atol=1e-10)
         return self.solution.t, self.solution.y
@@ -365,7 +376,7 @@ class PKEFuchsNordheimSolver(PointKineticsEquationSolver):
         if self.solution is None:
             raise RuntimeError("No solution available. Call solve() first.")
         t = self.solution.t
-        P = self.solution.y[0]
+        P = self.solution.y[1]  # Power is now at index 1
         T = self.solution.y[-1]
 
         fig, ax1 = plt.subplots(figsize=figsize)
