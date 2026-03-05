@@ -108,6 +108,34 @@ class TestPointKineticsEquationSolver:
         with pytest.raises(ValueError, match="Beta and lambda arrays must have equal length"):
             PointKineticsEquationSolver(zero_reactivity, params=invalid_params)
 
+    def test_validate_parameters_non_positive_lambda(self):
+        """Test parameter validation rejects non-positive precursor decay constants."""
+        def zero_reactivity(t):
+            return 0.0
+
+        invalid_params = {
+            'beta': np.array([0.001, 0.002]),
+            'lambda_': np.array([0.1, 0.0]),
+            'Lambda': 1e-5
+        }
+
+        with pytest.raises(ValueError, match="lambda_"):
+            PointKineticsEquationSolver(zero_reactivity, params=invalid_params)
+
+    def test_validate_parameters_non_positive_prompt_lifetime(self):
+        """Test parameter validation rejects invalid prompt neutron lifetime."""
+        def zero_reactivity(t):
+            return 0.0
+
+        invalid_params = {
+            'beta': np.array([0.001]),
+            'lambda_': np.array([0.1]),
+            'Lambda': 0.0
+        }
+
+        with pytest.raises(ValueError, match="Lambda"):
+            PointKineticsEquationSolver(zero_reactivity, params=invalid_params)
+
     def test_equations_method_zero_reactivity(self):
         """Test equations method with zero reactivity (steady state)"""
         def zero_reactivity(t):
@@ -271,6 +299,32 @@ class TestPointKineticsEquationSolver:
         # Should have same number of columns as time points
         assert y.shape[1] == len(t)
 
+    def test_solve_invalid_time_span_raises(self):
+        """Test solver rejects invalid integration interval."""
+        solver = PointKineticsEquationSolver(lambda t: 0.0)
+        with pytest.raises(ValueError, match="t_end > t_start"):
+            solver.solve(t_span=(2.0, 1.0))
+
+    def test_solve_invalid_initial_state_length_raises(self):
+        """Test solver rejects invalid custom initial state length."""
+        solver = PointKineticsEquationSolver(lambda t: 0.0)
+        with pytest.raises(ValueError, match="length"):
+            solver.solve(t_span=(0.0, 1.0), y0_override=np.array([1.0, 2.0]))
+
+    def test_numeric_accuracy_prompt_only_exponential(self):
+        """Test numerical solution against analytic prompt-only exponential growth."""
+        rho = 0.1
+        params = {
+            'beta': np.array([0.0]),
+            'lambda_': np.array([1.0]),
+            'Lambda': 1.0
+        }
+        solver = PointKineticsEquationSolver(lambda t: rho, params=params)
+        t, y = solver.solve(t_span=(0.0, 1.0), t_eval=np.linspace(0.0, 1.0, 51))
+
+        expected = np.exp(rho * t)
+        assert np.allclose(y[0], expected, rtol=2e-3, atol=1e-5)
+
     def test_equations_prompt_critical_case(self):
         """Test equations behavior near prompt critical"""
         # Need to define solver first
@@ -354,6 +408,13 @@ class TestPointKineticsEquationSolver:
         assert hasattr(solver.solution, 't')
         assert hasattr(solver.solution, 'y')
 
+    def test_plot_precursors_invalid_group_index(self):
+        """Test precursor plotting rejects out-of-range group indices."""
+        solver = PointKineticsEquationSolver(lambda t: 0.0)
+        solver.solve(t_span=(0.0, 0.2), t_eval=np.linspace(0.0, 0.2, 3))
+        with pytest.raises(IndexError):
+            solver.plot_precursors(groups=[999])
+
 
 class TestPKEFuchsNordheimSolver:
     """Test class for PKEFuchsNordheimSolver with power state variable"""
@@ -397,6 +458,13 @@ class TestPKEFuchsNordheimSolver:
         
         assert solver.fission_energy == 4.0e-11
         assert solver.nu == 2.5
+
+    def test_initialization_invalid_heat_capacity_raises(self):
+        """Test coupled solver rejects non-physical non-positive heat capacity."""
+        from arod_instrument.solver import PKEFuchsNordheimSolver
+
+        with pytest.raises(ValueError, match="m_Cp"):
+            PKEFuchsNordheimSolver(alpha_T=-2.5e-5, m_Cp=0.0, rho0=0.001, T0=20.0)
 
     def test_solve_state_vector_dimensions(self):
         """Test that solve returns correct state vector dimensions with power variable"""

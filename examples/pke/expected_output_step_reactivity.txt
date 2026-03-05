@@ -1,0 +1,5 @@
+description: Half-dollar positive step reactivity insertion
+final_time_s: 20.000000
+initial_neutron_density: 1.000000
+final_neutron_density: 77.553956
+peak_neutron_density: 77.553956

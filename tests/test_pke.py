@@ -15,6 +15,16 @@ from arod_instrument.pke import ReactorPowerCalculator
 class TestReactorPowerCalculator:
     """Test class for ReactorPowerCalculator"""
 
+    def test_initialization_invalid_dt_raises(self):
+        """Test constructor rejects non-positive integration time step."""
+        with pytest.raises(ValueError, match="dt"):
+            ReactorPowerCalculator(lambda: 0.0, dt=0.0)
+
+    def test_initialization_invalid_duration_raises(self):
+        """Test constructor rejects negative simulation duration."""
+        with pytest.raises(ValueError, match="duration"):
+            ReactorPowerCalculator(lambda: 0.0, duration=-1.0)
+
     def test_initialization_default_params(self):
         """Test ReactorPowerCalculator initialization with default parameters"""
         def dummy_reactivity():
@@ -396,3 +406,36 @@ class TestReactorPowerCalculator:
         
         # Should have debug print statements
         assert mock_print.call_count > 0
+
+    def test_run_with_real_solver_produces_finite_results(self):
+        """Integration test using real solver (no solver mock)."""
+        calc = ReactorPowerCalculator(lambda: 0.0, dt=0.01, duration=0.03)
+        calc.run()
+
+        assert len(calc.results) >= 3
+        neutron_values = [triple[2] for triple in calc.results]
+        assert np.all(np.isfinite(neutron_values))
+        assert all(abs(n - 1.0) < 1e-2 for n in neutron_values)
+
+    def test_run_non_finite_state_triggers_explosion_reset(self):
+        """Test non-finite neutron density path triggers safe reset/explosion event."""
+        explosion_event = threading.Event()
+        calc = ReactorPowerCalculator(lambda: 0.001, dt=0.01, duration=0.01, explosion_event=explosion_event)
+
+        with patch('arod_instrument.pke.time') as mock_time:
+            mock_time.time.side_effect = [0.0, 0.01, 0.02]
+            mock_time.sleep = Mock()
+
+            with patch.object(calc.solver, 'solve') as mock_solve:
+                mock_solve.return_value = (
+                    np.array([0.01]),
+                    np.array([[np.nan, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]])
+                )
+
+                with patch('builtins.print'):
+                    calc.run()
+
+        assert explosion_event.is_set()
+        assert len(calc.results) == 1
+        # After reset, safe fallback state should restore power to 1.0
+        assert calc.results[0][2] == pytest.approx(1.0)

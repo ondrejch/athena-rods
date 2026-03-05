@@ -33,7 +33,7 @@ vis_deps = [
 
 setup(
     name="athena-rods",
-    version="0.1.2",
+    version="0.2.0",
     description="ATHENA-rods: A hardware control and visualization system for nuclear reactor simulation",
     long_description=long_description,
     long_description_content_type='text/markdown',

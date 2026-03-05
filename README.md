@@ -121,6 +121,18 @@ sudo apt install -y python3-pip python3-numpy python3-scipy python3-opencv \
 **Enable hardware interfaces** using `sudo raspi-config`:
 - **Interface Options**: Enable SPI, I2C, and Camera.
 
+#### requirements.txt for reproducible environments
+
+For CI/HPC jobs and non-package workflows, use the pinned runtime dependency file:
+
+```bash
+pip install -r requirements.txt
+```
+
+Notes:
+- `requirements.txt` includes both scientific core dependencies and optional RPi/visualization dependencies.
+- For lean installs, prefer extras (`.[rpi]` or `.[vis]`) from `setup.py`.
+
 ### Using pre-built Debian packages
 
 Pre-built Debian (`.deb`) packages are available from the [GitHub Releases page](https://github.com/ondrejch/athena-rods/releases).
@@ -130,8 +142,8 @@ Pre-built Debian (`.deb`) packages are available from the [GitHub Releases page]
 1.  Download the `python3-athena-rods-rpi_..._all.deb` file from the latest release.
 2.  Install the package using `apt`, which will also handle system dependencies:
     ```bash
-    # Example for version 0.1.2
-    sudo apt install ./python3-athena-rods-rpi_0.1.2-1_all.deb
+    # Example for version 0.2.0
+    sudo apt install ./python3-athena-rods-rpi_0.2.0-1_all.deb
     ```
 
 #### For the Visualization Box (Ubuntu/Debian `x86_64`)
@@ -139,9 +151,31 @@ Pre-built Debian (`.deb`) packages are available from the [GitHub Releases page]
 1.  Download the `python3-athena-rods-vis_..._all.deb` file from the latest release.
 2.  Install the package:
     ```bash
-    # Example for version 0.1.2
-    sudo apt install ./python3-athena-rods-vis_0.1.2-1_all.deb
+    # Example for version 0.2.0
+    sudo apt install ./python3-athena-rods-vis_0.2.0-1_all.deb
     ```
+
+### HPC / SLURM batch runs (solver-only workflows)
+
+Hardware-dependent modules (`gpiozero`, camera, RFID) are not expected to run on HPC nodes.
+For numerical studies, use `arod_instrument.solver` only.
+
+Example SLURM script:
+
+```bash
+#!/bin/bash
+#SBATCH --job-name=athena-pke
+#SBATCH --time=00:05:00
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=1G
+#SBATCH --output=athena-pke-%j.out
+
+module load python/3.12
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+PYTHONPATH=src python examples/pke/run_step_case.py examples/pke/input_step_reactivity.json
+```
 
 ---
 
@@ -295,8 +329,17 @@ Safety:
 - `examples/arod_control/rfid_read.py`: RFID basics
 - `examples/arod_instrument`: stand-alone LED matrix and DHT demos
 - `examples/mfrc522`: read/write/dump tag examples
+- `examples/pke/input_step_reactivity.json`: solver input case for batch/CI validation
+- `examples/pke/run_step_case.py`: runs the JSON case and prints a deterministic summary
+- `examples/pke/expected_output_step_reactivity.txt`: expected output for quick regression checks
 
 Run examples directly with `python3` from the repository root.
+
+Reproducibility check:
+
+```bash
+PYTHONPATH=src python3 examples/pke/run_step_case.py examples/pke/input_step_reactivity.json
+```
 
 ---
 
@@ -305,6 +348,34 @@ Run examples directly with `python3` from the repository root.
 Editable install:
 ```bash
 pip3 install -e .
+```
+
+Run tests:
+```bash
+pytest -v
+```
+
+Generate a revision/version manifest (for reports and archived runs):
+```bash
+PYTHONPATH=src python3 util/write_revision_manifest.py --context ci
+```
+
+Run control-performance tests (step-response metrics):
+```bash
+PYTHONPATH=src python3 util/run_control_performance_tests.py \
+  --report build/control_performance_report.json
+```
+
+Run network/security performance benchmarks (TCP vs mTLS on loopback):
+```bash
+PYTHONPATH=src python3 util/run_network_security_performance.py \
+  --report build/network_security_performance_report.json
+```
+
+Run security verification tests (mTLS acceptance/rejection behavior):
+```bash
+PYTHONPATH=src python3 util/run_security_verification_tests.py \
+  --report build/security_verification_report.json
 ```
 
 Logging:

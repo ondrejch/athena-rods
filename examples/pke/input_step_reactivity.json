@@ -1,0 +1,9 @@
+{
+  "description": "Half-dollar positive step reactivity insertion",
+  "reactivity_dollars": 0.5,
+  "step_time_s": 1.0,
+  "t_start_s": 0.0,
+  "t_end_s": 20.0,
+  "num_points": 1000,
+  "source_strength": 0.0
+}
