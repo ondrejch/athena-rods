@@ -13,6 +13,7 @@ import json
 import os
 import ssl
 import queue
+import signal
 from arod_control.leds import LEDs
 from arod_control.display import Display
 from arod_control.authorization import RFID_Authorization, FaceAuthorization
@@ -67,6 +68,62 @@ servers: Dict[str, Any] = {
 }
 stop_event: threading.Event = threading.Event()  # Global event for clean shutdown
 ctrl_speak_q: queue.Queue[Dict[str, Any]] = queue.Queue(maxsize=10) # Queue for speaker thread
+
+
+def request_shutdown(reason: Optional[str] = None) -> None:
+    """Request cooperative shutdown for all running threads."""
+    if reason:
+        logger.info(reason)
+    stop_event.set()
+
+
+def _safe_close_socket(sock: Any, label: str) -> None:
+    """Best-effort socket close helper used during shutdown."""
+    if sock is None:
+        return
+    try:
+        sock.shutdown(socket.SHUT_RDWR)
+    except Exception:
+        pass
+    try:
+        sock.close()
+    except Exception as e:
+        logger.warning(f"Error closing {label}: {e}")
+
+
+def close_server_sockets() -> None:
+    """Close listener sockets to stop accept loops."""
+    for server_name, server_info in list(servers.items()):
+        if not server_info:
+            continue
+        server = server_info["socket"] if isinstance(server_info, dict) else server_info
+        _safe_close_socket(server, f"{server_name} server socket")
+        servers[server_name] = None
+        logger.info(f"{server_name} server socket closed")
+
+
+def close_client_connections() -> None:
+    """Close all active instrument/display client sockets."""
+    with connection_lock:
+        for conn_name, conns in list(connections.items()):
+            if isinstance(conns, list):
+                for conn in list(conns):
+                    _safe_close_socket(conn, f"{conn_name} client socket")
+                conns.clear()
+            else:
+                _safe_close_socket(conns, f"{conn_name} socket")
+                connections[conn_name] = None
+    logger.info("All connections closed.")
+
+
+def install_signal_handlers() -> None:
+    """Install SIGINT/SIGTERM handlers for service-mode graceful shutdown."""
+    def _handle_signal(signum: int, _frame: Any) -> None:
+        signal_name = signal.Signals(signum).name
+        request_shutdown(f"Signal {signal_name} received, shutting down...")
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, _handle_signal)
 
 
 def accept_stream_connections() -> None:
@@ -449,13 +506,15 @@ def run_display() -> None:
     logger.info('LCD display thread initialized')
     while not stop_event.is_set():
         message = CB_STATE['message']['text']
-        time.sleep(CB_STATE['refresh']['display'])
+        if stop_event.wait(timeout=CB_STATE['refresh']['display']):
+            break
         if message:
             display.show_message(message)
             message = message.replace("\n", " \\\\ ")
             logger.info(f"LCD display: show message {message} for {CB_STATE['message']['timer']} sec")
             CB_STATE['message']['text'] = ''
-            time.sleep(max(0.1, CB_STATE['message']['timer'] - CB_STATE['refresh']['display']))
+            if stop_event.wait(timeout=max(0.1, CB_STATE['message']['timer'] - CB_STATE['refresh']['display'])):
+                break
         else:
             display.show_sensors()
 
@@ -663,8 +722,7 @@ def setup_socket_servers() -> bool:
 
 def main_loop() -> None:
     """Main program loop that starts all threads and manages socket servers"""
-    global stop_event
-    stop_event = threading.Event()
+    stop_event.clear()
     threads = []
 
     # LED driver
@@ -676,7 +734,8 @@ def main_loop() -> None:
     display_thread = threading.Thread(target=run_display, daemon=True)
     display_thread.start()
     threads.append(display_thread)
-    time.sleep(2)
+    if stop_event.wait(timeout=2):
+        request_shutdown("Shutdown requested during startup delay.")
 
     # Authorization
     auth_thread = threading.Thread(target=run_auth, daemon=True)
@@ -714,49 +773,29 @@ def main_loop() -> None:
 
     logger.info("All threads started, entering main loop")
     try:
-        # Main thread just keeps the program alive
-        while True:
-            time.sleep(5)  # Optional: Health check could go here
+        # Keep service alive until an explicit shutdown request arrives.
+        while not stop_event.wait(timeout=5):
+            continue
     except KeyboardInterrupt:
-        logger.info(f"Threads: {threading.active_count()}\nKeyboard interrupt received, shutting down")
-        stop_event.set()
+        request_shutdown(f"Threads: {threading.active_count()}\nKeyboard interrupt received, shutting down")
+    finally:
+        request_shutdown("Waiting for worker threads to stop...")
+        for thread in threads:
+            if thread.is_alive():
+                thread.join(timeout=2.0)
+
+        close_server_sockets()
+        close_client_connections()
+        logger.info("Shutdown complete.")
 
 
 if __name__ == "__main__":
     logger.info("*** ATHENA rods Control Box started ***")
+    install_signal_handlers()
     try:
         main_loop()
     except KeyboardInterrupt:
-        logger.info("Ctrl+C detected, shutting down sockets and threads...")
-        stop_event.set()
+        request_shutdown("Ctrl+C detected, shutting down sockets and threads...")
     except Exception as e:
         logger.error(f"Unhandled exception in main: {e}")
-        stop_event.set()
-    finally:
-        # Clean shutdown of socket servers
-        for server_name, server_info in servers.items():
-            if server_info:
-                try:
-                    server = server_info["socket"] if isinstance(server_info, dict) else server_info
-                    server.close()
-                    logger.info(f"{server_name} server socket closed")
-                except Exception as e:
-                    logger.warning(f"Error closing {server_name} server socket: {e}")
-
-        # Clean shutdown of client connections
-        with connection_lock:
-            for conn_name, conns in connections.items():
-                if isinstance(conns, list):
-                    for conn in conns:
-                        if conn:
-                            try:
-                                conn.close()
-                            except Exception: pass
-                else:
-                    if conns:
-                        try:
-                            conns.close()
-                        except Exception: pass
-            logger.info("All connections closed.")
-
-        logger.info("Shutdown complete.")
+        request_shutdown("Unhandled exception triggered shutdown.")

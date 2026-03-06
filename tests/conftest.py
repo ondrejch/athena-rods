@@ -9,7 +9,7 @@ requiring physical hardware.
 
 import sys
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 
 def create_mock_gpio():
@@ -163,12 +163,6 @@ def hardware_mocks():
     mock_sensors = create_mock_sensors() 
     mock_gpiozero = create_mock_gpiozero()
     
-    # Mock subprocess for LCD operations
-    mock_subprocess = Mock()
-    mock_subprocess.run = Mock()
-    mock_subprocess.call = Mock(return_value=0)
-    mock_subprocess.check_output = Mock(return_value=b"")
-    
     # Apply mocks to sys.modules
     original_modules = {}
     modules_to_mock = {
@@ -179,7 +173,6 @@ def hardware_mocks():
         'smbus2': mock_smbus2,
         'sensors': mock_sensors,
         'gpiozero': mock_gpiozero,
-        'subprocess': mock_subprocess,
     }
     
     # Store original modules and apply mocks
@@ -195,7 +188,6 @@ def hardware_mocks():
         'smbus2': mock_smbus2,
         'sensors': mock_sensors,
         'gpiozero': mock_gpiozero,
-        'subprocess': mock_subprocess,
     }
     
     # Restore original modules after tests
@@ -207,7 +199,7 @@ def hardware_mocks():
 
 
 @pytest.fixture(scope="function")
-def fresh_sensors_mock(mocker):
+def fresh_sensors_mock(monkeypatch):
     """
     Function-scoped fixture for hwsens tests that need isolated sensor mocks.
     This ensures test isolation by providing a fresh mock for each test function.
@@ -221,7 +213,7 @@ def fresh_sensors_mock(mocker):
     # Create fresh mock
     mock_sensors = create_mock_sensors()
     
-    # Patch it in sys.modules  
-    mocker.patch.dict('sys.modules', {'sensors': mock_sensors})
-    
+    # Patch it in sys.modules.
+    monkeypatch.setitem(sys.modules, 'sensors', mock_sensors)
+
     return mock_sensors

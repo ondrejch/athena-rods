@@ -1,3 +1,5 @@
+"""MFRC522 RFID reader convenience exports."""
+
 from .MFRC522 import MFRC522
 from .SimpleMFRC522 import SimpleMFRC522
 from .SimpleMFRC522 import StoreMFRC522

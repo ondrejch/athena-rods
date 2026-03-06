@@ -1,3 +1,5 @@
+"""Shared communication settings for ATHENA-rods components."""
+
 # ATHENA-rods communication setup
 USE_SSL: bool = True                        # Use SSL in communication
 AUTH_ETC_PATH: str = "git/athena-rods/etc"  # Path to CtrBox configuration, in home directory

@@ -4,15 +4,24 @@ Main loop for the instrumentation box RPi5
 Ondrej Chvala <ochvala@utexas.edu>
 """
 
-from typing import Optional, Any, Dict, Tuple
+from typing import Any, Dict
 import logging
 import queue
 import time
 import threading
 import os
 from arod_control import PORT_CTRL, PORT_STREAM, CONTROL_IP
-from devices import get_dht, get_distance, speed_of_sound, motor, sonar, rod_engage, rod_scram, limit_switch
-from pke import ReactorPowerCalculator
+from arod_instrument.devices import (
+    get_dht,
+    get_distance,
+    speed_of_sound,
+    motor,
+    sonar,
+    rod_engage,
+    rod_scram,
+    limit_switch,
+)
+from arod_instrument.pke import ReactorPowerCalculator
 from arod_control.socket_utils import SocketManager, StreamingPacket
 from arod_control import USE_SSL, AUTH_ETC_PATH
 
@@ -192,8 +201,8 @@ class Reactivity:
             return 0.0  # Safe default
 
 
-def set_speed_of_sound() -> Optional[float]:
-    """Checks temperature and humidity, and updates sonar's speed of sound in air"""
+def set_speed_of_sound() -> bool:
+    """Update sonar speed of sound using the latest temperature/humidity sample."""
     my_speed_of_sound: float = -999.9
     retry_count = 0
     max_retries = 10

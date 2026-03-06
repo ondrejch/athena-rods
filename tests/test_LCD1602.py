@@ -9,10 +9,8 @@ from unittest.mock import Mock, patch, MagicMock
 
 # Mock hardware dependencies before importing
 mock_smbus = Mock()
-mock_subprocess = Mock()
 
 sys.modules['smbus2'] = mock_smbus
-sys.modules['subprocess'] = mock_subprocess
 
 from arod_control import LCD1602
 
