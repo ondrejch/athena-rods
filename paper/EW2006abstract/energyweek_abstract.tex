@@ -1,0 +1,26 @@
+\documentclass[11pt]{article}
+\usepackage[letterpaper,margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+
+\begin{document}
+
+\textbf{Title:} ATHENA-rods: A Low-Cost Cyber-Physical Platform for Nuclear Control Education and Secure Digital I\&C Prototyping
+
+\textbf{Authors:} Ondrej Chvala
+
+\textbf{Email:} ochvala@utexas.edu
+
+\textbf{Key findings:} A home-fabricable, approximately \$390 platform built from two Raspberry Pi 5 nodes and 3D-printed hardware can integrate reactor kinetics, physical actuation, and X.509-based secure communications for interdisciplinary engineering training.
+
+Digital instrumentation and control (I\&C) modernization in nuclear systems requires engineers who can work across reactor dynamics, hardware integration, and cybersecurity. At the same time, there is a persistent gap between modern network-security capabilities and commonly deployed SCADA/OT practice, and educational infrastructure that makes this gap tangible is limited. ATHENA-rods addresses this need with an open-source cyber-physical platform for interdisciplinary training. This work is part of the ongoing nuclear digital twins effort at The University of Texas at Austin.
+
+The platform is organized as three cooperating nodes: an instrument node (\texttt{instbox}), a control node (\texttt{ctrlbox}), and a visualization node (\texttt{visbox}). The instrument node uses a DC motor, servo, ultrasonic ranging, DHT11 environmental sensing, a limit switch, and an LED matrix to emulate control-rod motion and reactor-state feedback via real-time point kinetics. The control node manages authorization and command routing; the visualization node provides live telemetry and supervisory controls. Security is integrated through X.509 certificate management and TLS/mTLS communication, with optional face-plus-RFID operator authorization. Mechanical components are distributed as FreeCAD and STL assets for consumer FDM printing.
+
+Current validation includes reproducibility manifests, control-performance metrics, and security verification workflows. Representative step-response tests show stable positive and negative reactivity transients with overshoot of approximately 9.0\% and 4.0\%, respectively. Estimated build cost is approximately \$390. Ongoing work includes hardware-backed latency/throughput benchmarking, certificate lifecycle testing, and DNP3/TLS integration. Code, CAD, and test artifacts are available on GitHub (https://github.com/ondrejch/athena-rods).
+
+\end{document}
