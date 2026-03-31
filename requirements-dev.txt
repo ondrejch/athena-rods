@@ -11,3 +11,5 @@ dash~=3.2.0
 opencv-python~=4.11.0.86
 picamera2~=0.3.30
 setuptools~=80.9.0
+
+psutil
