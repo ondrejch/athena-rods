@@ -212,6 +212,9 @@ def slide1_svg() -> str:
     ctrl_x = right_x
     vis_x = ctrl_x + ctrl_w + row_gap
     sec_x = vis_x + small_w + row_gap
+    vis_label_w = min(170, small_w - 6)
+    vis_label_x = vis_x + (small_w - vis_label_w) // 2
+    vis_label_y = row_y + 16
     cta_w = 620
     cta_x = right_x + (right_w - cta_w) // 2
     owl_pad = 10
@@ -289,8 +292,9 @@ def slide1_svg() -> str:
 
     parts.append(image_card(hero_x, hero_y, hero_w, hero_h, img_hw1, label="instrument", fit="xMidYMid slice"))
     parts.append(image_card(ctrl_x, row_y, ctrl_w, row_h, img_ctrl, label="control", fit="xMidYMid slice"))
-    parts.append(image_card(vis_x, row_y, small_w, row_h, img_vis, label="visualization"))
+    parts.append(image_card(vis_x, row_y, small_w, row_h, img_vis))
     parts.append(image_card(sec_x, row_y, small_w, row_h, img_chain, label="security"))
+    parts.append(pill(vis_label_x, vis_label_y, vis_label_w, 36, "visualization", fill=COLORS["orange"]))
     parts.append(pill(cta_x, 948, cta_w, 52, "Poster shows the full build, workflow, and validation.", fill=COLORS["navy"]))
     return svg_root("".join(parts))
 
@@ -313,7 +317,7 @@ def slide2_svg() -> str:
         pill(320, 82, 220, 46, "poster preview", fill=COLORS["navy"]),
         card(poster_x, poster_y, poster_w, poster_h, fill="#ffffff"),
         image_tag(poster_x + poster_pad, poster_y + poster_pad, poster_w - 2 * poster_pad, poster_h - 2 * poster_pad, poster, fit="xMidYMid meet"),
-        t(text_x, 186, "Come see the poster", size=60, weight="700", fill="#ffffff"),
+        t(text_x, 186, "Come see the poster!", size=60, weight="700", fill="#ffffff"),
     ]
 
     sub_svg, sub_end = text_block(
@@ -332,15 +336,16 @@ def slide2_svg() -> str:
     y = sub_end + 62
     for item in [
         "3D-printed hardware, Raspberry Pi nodes, and the parts-to-buy list.",
-        "The software flow from sensors to point kinetics and Dash visualization.",
+        "Data flow from sensors to point kinetics and visualization.",
+        "Control flow from visualization to actuators.",
         "Certificates, TLS or mTLS, and face plus RFID authorization.",
         "Control-performance tests, security verification, and reproducibility.",
     ]:
         item_svg, y = callout_item(text_x, y, item)
         parts.append(item_svg)
 
-    parts.append(rounded_rect(1210, 740, 650, 102, rx=26, fill="url(#orangeGrad)"))
-    parts.append(t(1236, 800, "https://github.com/ondrejch/athena-rods", size=32, fill="#ffffff", weight="700"))
+    parts.append(rounded_rect(1210, 790, 650, 102, rx=26, fill="url(#orangeGrad)"))
+    parts.append(t(1236, 850, "https://github.com/ondrejch/athena-rods", size=32, fill="#ffffff", weight="700"))
 
     parts.append(
         t(
@@ -606,7 +611,11 @@ def build_odp() -> None:
     add_image(page1, 1107, 166, 618, 488, ASSETS / "odp_pictures/10000000000003B9000004F7DE05E82C.png")
     add_rect(page1, 1008, 696, 418, 204, "#ffffff", stroke=COLORS["line"])
     add_image(page1, 1024, 712, 386, 172, ASSETS / "odp_pictures/10000000000003B9000004F71F91EBEB.png")
-    add_rect(page1, 1448, 696, 188, 204, "#ffffff", stroke=COLORS["line"])
+    vis_frame_x, vis_frame_w = 1448, 188
+    vis_label_w_odp = 170
+    vis_label_x_odp = vis_frame_x + (vis_frame_w - vis_label_w_odp) // 2
+
+    add_rect(page1, vis_frame_x, 696, vis_frame_w, 204, "#ffffff", stroke=COLORS["line"])
     add_image(page1, 1460, 708, 164, 180, ASSETS / "visbox.png")
     add_rect(page1, 1658, 696, 166, 204, "#ffffff", stroke=COLORS["line"])
     add_image(page1, 1670, 708, 142, 180, ASSETS / "odp_pictures/10000000000001FF0000017DD8DA8883.png")
@@ -628,8 +637,8 @@ def build_odp() -> None:
     add_text(page1, 1115, 164, 200, 30, "instrument", size_px=24, color="#ffffff", bold=True, align="center")
     add_rect(page1, 1020, 704, 140, 44, COLORS["orange"], stroke=None)
     add_text(page1, 1020, 714, 140, 30, "control", size_px=24, color="#ffffff", bold=True, align="center")
-    add_rect(page1, 1458, 704, 170, 44, COLORS["orange"], stroke=None)
-    add_text(page1, 1458, 714, 170, 30, "visualization", size_px=24, color="#ffffff", bold=True, align="center")
+    add_rect(page1, vis_label_x_odp, 704, vis_label_w_odp, 44, COLORS["orange"], stroke=None)
+    add_text(page1, vis_label_x_odp, 714, vis_label_w_odp, 30, "visualization", size_px=24, color="#ffffff", bold=True, align="center")
     add_rect(page1, 1668, 704, 150, 44, COLORS["orange"], stroke=None)
     add_text(page1, 1668, 714, 150, 30, "security", size_px=24, color="#ffffff", bold=True, align="center")
 
