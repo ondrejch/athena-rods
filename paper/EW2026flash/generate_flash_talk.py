@@ -150,7 +150,7 @@ def callout_item(x: int, y: int, text: str) -> tuple[str, int]:
     parts = [
         rounded_rect(x, y - 20, 18, 18, rx=5, fill=COLORS["orange"]),
     ]
-    block, end_y = text_block(x + 34, y, text, width_chars=30, size=30, line_gap=1.20, fill="#ffffff")
+    block, end_y = text_block(x + 34, y, text, width_chars=35, size=30, line_gap=1.20, fill="#ffffff")
     parts.append(block)
     return "".join(parts), end_y + 10
 
@@ -192,8 +192,7 @@ def svg_root(body: str) -> str:
 
 def slide1_svg() -> str:
     logo = b64_data_uri(ASSETS / "UTEW26_Square_Color-RGB.png")
-    owl = b64_data_uri(ASSETS / "odp_pictures/100000000000040000000400D1BBBF6D.png")
-    logo_mark = b64_data_uri(ASSETS / "odp_pictures/10000000000004000000040085C2CAE1.png")
+    owl = b64_data_uri(ASSETS / "owl.png")
     img_ctrl = b64_data_uri(ASSETS / "odp_pictures/10000000000003B9000004F71F91EBEB.png")
     img_hw1 = b64_data_uri(ASSETS / "odp_pictures/10000000000003B9000004F7DE05E82C.png")
     img_vis = b64_data_uri(ASSETS / "visbox.png")
@@ -215,7 +214,12 @@ def slide1_svg() -> str:
     sec_x = vis_x + small_w + row_gap
     cta_w = 620
     cta_x = right_x + (right_w - cta_w) // 2
-    logo_mark_x = hero_x + hero_w // 2 - 75
+    owl_badge_size = 380
+    owl_pad = 10
+    owl_img_size = owl_badge_size - 2 * owl_pad
+    # Keep Athena graphic left of, and vertically centered on, the hero image.
+    owl_badge_x = hero_x - owl_badge_size
+    owl_badge_y = hero_y + (hero_h - owl_badge_size) // 2
 
     parts = [
         f'<rect x="0" y="0" width="{W}" height="{H}" fill="url(#bgGrad1)"/>',
@@ -223,8 +227,17 @@ def slide1_svg() -> str:
         pill(left_x, 88, 360, 48, "UT Energy Week 2026 Flash Talk", fill=COLORS["orange"]),
         rounded_rect(1710, 60, 140, 140, rx=28, fill="#ffffff", stroke=COLORS["line"], stroke_width=2),
         image_tag(1724, 74, 112, 112, logo),
-        rounded_rect(logo_mark_x, 70, 150, 150, rx=75, fill="#fff4ea", stroke=COLORS["orange_soft"], stroke_width=2),
-        image_tag(logo_mark_x + 26, 96, 98, 98, logo_mark),
+        rounded_rect(
+            owl_badge_x,
+            owl_badge_y,
+            owl_badge_size - 100,
+            owl_badge_size,
+            rx=28,
+            fill="#fff4ea",
+            stroke=COLORS["orange_soft"],
+            stroke_width=2,
+        ),
+        image_tag(owl_badge_x, owl_badge_y, owl_img_size, owl_img_size, owl),
         t(left_x, 250, "ATHENA-rods", size=104, weight="700", fill=COLORS["orange"]),
     ]
 
@@ -258,24 +271,21 @@ def slide1_svg() -> str:
     parts.append(metric_card(left_x, metrics_y + 142, 820, 118, "Security", "X.509 and TLS networking plus face and RFID operator authorization."))
     parts.append(metric_card(left_x, metrics_y + 284, 820, 118, "Access", "Home-printable parts, open-source code, and about $390 build cost."))
 
-    footer_svg, _ = text_block(
-        left_x,
-        1030,
-        "Ondrej Chvala | Walker Department of Mechanical Engineering | The University of Texas at Austin | https://github.com/ondrejch/athena-rods",
-        width_chars=92,
-        size=18,
-        line_gap=1.15,
-        fill=COLORS["muted"],
-        weight="600",
+    parts.append(
+        t(
+            left_x,
+            1050,
+            "Ondrej Chvala | Walker Department of Mechanical Engineering | The University of Texas at Austin | ochvala@utexas.edu | https://github.com/ondrejch/athena-rods",
+            size=16,
+            fill=COLORS["muted"],
+            weight="600",
+        )
     )
-    parts.append(footer_svg)
 
     parts.append(image_card(hero_x, hero_y, hero_w, hero_h, img_hw1, label="instrument", fit="xMidYMid slice"))
     parts.append(image_card(ctrl_x, row_y, ctrl_w, row_h, img_ctrl, label="control", fit="xMidYMid slice"))
     parts.append(image_card(vis_x, row_y, small_w, row_h, img_vis, label="visualization"))
     parts.append(image_card(sec_x, row_y, small_w, row_h, img_chain, label="security"))
-    parts.append(rounded_rect(hero_x + 430, hero_y + 32, 220, 220, rx=110, fill="#ffffff", opacity=0.78))
-    parts.append(image_tag(hero_x + 455, hero_y + 57, 170, 170, owl, opacity=0.22))
     parts.append(pill(cta_x, 948, cta_w, 52, "Poster shows the full build, workflow, and validation.", fill=COLORS["navy"]))
     return svg_root("".join(parts))
 
@@ -303,13 +313,13 @@ def slide2_svg() -> str:
 
     sub_svg, sub_end = text_block(
         text_x,
-        246,
-        "If you want the full hardware stack, software path, security workflow, and validation story.",
-        width_chars=31,
-        size=32,
-        line_gap=1.20,
+        250,
+        "Live DEMO!",
+        width_chars=22,
+        size=52,
+        line_gap=1.0,
         fill="#dce7f0",
-        weight="600",
+        weight="700",
     )
     parts.append(sub_svg)
     parts.append(f'<rect x="{text_x}" y="{sub_end + 8}" width="470" height="4" rx="2" fill="{COLORS["orange_light"]}" opacity="0.90"/>')
@@ -324,24 +334,14 @@ def slide2_svg() -> str:
         item_svg, y = callout_item(text_x, y, item)
         parts.append(item_svg)
 
-    parts.append(rounded_rect(1218, 846, 620, 102, rx=26, fill="url(#orangeGrad)"))
-    cta_svg, _ = text_block(
-        1262,
-        890,
-        "https://github.com/ondrejch/athena-rods",
-        width_chars=34,
-        size=32,
-        line_gap=1.0,
-        fill="#ffffff",
-        weight="700",
-    )
-    parts.append(cta_svg)
+    parts.append(rounded_rect(1210, 740, 650, 102, rx=26, fill="url(#orangeGrad)"))
+    parts.append(t(1236, 800, "https://github.com/ondrejch/athena-rods", size=32, fill="#ffffff", weight="700"))
 
     note_svg, _ = text_block(
         text_x,
         986,
         "Part of the ongoing UT nuclear digital twins effort.",
-        width_chars=34,
+        width_chars=60,
         size=24,
         line_gap=1.15,
         fill="#dce7f0",
@@ -555,15 +555,17 @@ def build_odp() -> None:
     add_text(
         page1,
         96,
-        1022,
-        860,
-        56,
-        "Ondrej Chvala | Walker Department of Mechanical Engineering | The University of Texas at\nAustin | https://github.com/ondrejch/athena-rods",
-        size_px=18,
+        1028,
+        1720,
+        26,
+        "Ondrej Chvala | Walker Department of Mechanical Engineering | The University of Texas at Austin | ochvala@utexas.edu | https://github.com/ondrejch/athena-rods",
+        size_px=16,
         color=COLORS["muted"],
         bold=True,
     )
 
+    add_rect(page1, 809, 280, 260, 260, "#fff4ea", stroke=COLORS["orange_soft"])
+    add_image(page1, 841, 312, 196, 196, ASSETS / "odp_pictures/100000000000040000000400D1BBBF6D.png")
     add_rect(page1, 1091, 150, 650, 520, "#ffffff", stroke=COLORS["line"])
     add_image(page1, 1107, 166, 618, 488, ASSETS / "odp_pictures/10000000000003B9000004F7DE05E82C.png")
     add_rect(page1, 1008, 696, 418, 204, "#ffffff", stroke=COLORS["line"])
@@ -618,7 +620,7 @@ def build_odp() -> None:
         248,
         600,
         132,
-        "LIVE DEMO!",
+        "Live DEMO!",
         size_px=32,
         color="#dce7f0",
         bold=True,
@@ -636,12 +638,12 @@ def build_odp() -> None:
         add_text(page2, 1250, by, 620, 92, b, size_px=30, color="#ffffff")
         by += 122
 
-    add_rect(page2, 1218, 846, 620, 102, COLORS["orange"], stroke=None)
+    add_rect(page2, 1200, 846, 690, 102, COLORS["orange"], stroke=None)
     add_text(
         page2,
-        1248,
+        1236,
         872,
-        584,
+        650,
         50,
         "https://github.com/ondrejch/athena-rods",
         size_px=32,
