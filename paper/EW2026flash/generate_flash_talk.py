@@ -214,12 +214,16 @@ def slide1_svg() -> str:
     sec_x = vis_x + small_w + row_gap
     cta_w = 620
     cta_x = right_x + (right_w - cta_w) // 2
-    owl_badge_size = 380
     owl_pad = 10
-    owl_img_size = owl_badge_size - 2 * owl_pad
-    # Keep Athena graphic left of, and vertically centered on, the hero image.
-    owl_badge_x = hero_x - owl_badge_size
-    owl_badge_y = hero_y + (hero_h - owl_badge_size) // 2
+    # Keep the full owl image (646x954) and scale its displayed height by ~10%.
+    owl_ratio = 646 / 954
+    owl_img_h = int(round((400 - 2 * owl_pad)))
+    owl_img_w = int(round(owl_img_h * owl_ratio))
+    owl_badge_w = owl_img_w + 2 * owl_pad
+    owl_badge_h = owl_img_h + 2 * owl_pad
+    # Keep Athena graphic next to the hero image with equal x/y spacing.
+    owl_badge_x = hero_x - owl_badge_w - owl_pad
+    owl_badge_y = hero_y + owl_pad
 
     parts = [
         f'<rect x="0" y="0" width="{W}" height="{H}" fill="url(#bgGrad1)"/>',
@@ -230,14 +234,14 @@ def slide1_svg() -> str:
         rounded_rect(
             owl_badge_x,
             owl_badge_y,
-            owl_badge_size - 100,
-            owl_badge_size,
+            owl_badge_w,
+            owl_badge_h,
             rx=28,
             fill="#fff4ea",
             stroke=COLORS["orange_soft"],
             stroke_width=2,
         ),
-        image_tag(owl_badge_x, owl_badge_y, owl_img_size, owl_img_size, owl),
+        image_tag(owl_badge_x + owl_pad, owl_badge_y + owl_pad, owl_img_w, owl_img_h, owl),
         t(left_x, 250, "ATHENA-rods", size=104, weight="700", fill=COLORS["orange"]),
     ]
 
@@ -336,6 +340,17 @@ def slide2_svg() -> str:
 
     parts.append(rounded_rect(1210, 740, 650, 102, rx=26, fill="url(#orangeGrad)"))
     parts.append(t(1236, 800, "https://github.com/ondrejch/athena-rods", size=32, fill="#ffffff", weight="700"))
+
+    parts.append(
+        t(
+            96,
+            1050,
+            "Ondrej Chvala | The University of Texas at Austin | ochvala@utexas.edu | https://github.com/ondrejch/athena-rods",
+            size=16,
+            fill=COLORS["muted"],
+            weight="600",
+        )
+    )
 
     note_svg, _ = text_block(
         text_x,
@@ -564,8 +579,27 @@ def build_odp() -> None:
         bold=True,
     )
 
-    add_rect(page1, 809, 280, 260, 260, "#fff4ea", stroke=COLORS["orange_soft"])
-    add_image(page1, 841, 312, 196, 196, ASSETS / "odp_pictures/100000000000040000000400D1BBBF6D.png")
+    hero_x_odp, hero_y_odp = 1091, 150
+    hero_w_odp, hero_h_odp = 650, 520
+    owl_pad_odp = 10
+    owl_gap_odp = owl_pad_odp
+    owl_ratio_odp = 646 / 954
+    owl_img_h_odp = int(round((260 - 2 * owl_pad_odp) * 1.10))
+    owl_img_w_odp = int(round(owl_img_h_odp * owl_ratio_odp))
+    owl_badge_w_odp = owl_img_w_odp + 2 * owl_pad_odp
+    owl_badge_h_odp = owl_img_h_odp + 2 * owl_pad_odp
+    owl_badge_x_odp = hero_x_odp - owl_badge_w_odp - owl_gap_odp
+    owl_badge_y_odp = hero_y_odp + owl_pad_odp
+
+    add_rect(page1, owl_badge_x_odp, owl_badge_y_odp, owl_badge_w_odp, owl_badge_h_odp, "#fff4ea", stroke=COLORS["orange_soft"])
+    add_image(
+        page1,
+        owl_badge_x_odp + owl_pad_odp,
+        owl_badge_y_odp + owl_pad_odp,
+        owl_img_w_odp,
+        owl_img_h_odp,
+        ASSETS / "owl.png",
+    )
     add_rect(page1, 1091, 150, 650, 520, "#ffffff", stroke=COLORS["line"])
     add_image(page1, 1107, 166, 618, 488, ASSETS / "odp_pictures/10000000000003B9000004F7DE05E82C.png")
     add_rect(page1, 1008, 696, 418, 204, "#ffffff", stroke=COLORS["line"])
