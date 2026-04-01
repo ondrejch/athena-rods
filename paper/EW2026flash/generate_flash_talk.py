@@ -221,9 +221,9 @@ def slide1_svg() -> str:
     owl_img_w = int(round(owl_img_h * owl_ratio))
     owl_badge_w = owl_img_w + 2 * owl_pad
     owl_badge_h = owl_img_h + 2 * owl_pad
-    # Keep Athena graphic next to the hero image with equal x/y spacing.
-    owl_badge_x = hero_x - owl_badge_w - owl_pad
-    owl_badge_y = hero_y + owl_pad
+    # Keep Athena graphic next to the hero image and align the top edges.
+    owl_badge_x = hero_x - owl_badge_w - 2 * owl_pad
+    owl_badge_y = hero_y
 
     parts = [
         f'<rect x="0" y="0" width="{W}" height="{H}" fill="url(#bgGrad1)"/>',
@@ -231,6 +231,7 @@ def slide1_svg() -> str:
         pill(left_x, 88, 360, 48, "UT Energy Week 2026 Flash Talk", fill=COLORS["orange"]),
         rounded_rect(1710, 60, 140, 140, rx=28, fill="#ffffff", stroke=COLORS["line"], stroke_width=2),
         image_tag(1724, 74, 112, 112, logo),
+        rounded_rect(owl_badge_x + 10, owl_badge_y + 14, owl_badge_w, owl_badge_h, rx=28, fill="#000000", opacity=0.09),
         rounded_rect(
             owl_badge_x,
             owl_badge_y,
@@ -589,8 +590,9 @@ def build_odp() -> None:
     owl_badge_w_odp = owl_img_w_odp + 2 * owl_pad_odp
     owl_badge_h_odp = owl_img_h_odp + 2 * owl_pad_odp
     owl_badge_x_odp = hero_x_odp - owl_badge_w_odp - owl_gap_odp
-    owl_badge_y_odp = hero_y_odp + owl_pad_odp
+    owl_badge_y_odp = hero_y_odp
 
+    add_rect(page1, owl_badge_x_odp + 10, owl_badge_y_odp + 14, owl_badge_w_odp, owl_badge_h_odp, "#d2d7dd", stroke=None)
     add_rect(page1, owl_badge_x_odp, owl_badge_y_odp, owl_badge_w_odp, owl_badge_h_odp, "#fff4ea", stroke=COLORS["orange_soft"])
     add_image(
         page1,
