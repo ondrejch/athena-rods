@@ -270,7 +270,7 @@ def slide1_svg() -> str:
     )
     parts.append(bridge_svg)
 
-    metrics_y = bridge_end + 32
+    metrics_y = bridge_end + 12
     parts.append(metric_card(left_x, metrics_y, 820, 118, "Physics", "Physical control rod motion tied to live point-kinetics response."))
     parts.append(metric_card(left_x, metrics_y + 142, 820, 118, "Security", "X.509 and TLS networking plus face and RFID operator authorization."))
     parts.append(metric_card(left_x, metrics_y + 284, 820, 118, "Access", "Home-printable parts, open-source code, and about $390 build cost."))
@@ -345,7 +345,7 @@ def slide2_svg() -> str:
         t(
             96,
             1050,
-            "Ondrej Chvala | The University of Texas at Austin | ochvala@utexas.edu | https://github.com/ondrejch/athena-rods",
+            "Ondrej Chvala | Walker Department of Mechanical Engineering | The University of Texas at Austin | ochvala@utexas.edu",
             size=16,
             fill=COLORS["muted"],
             weight="600",
@@ -553,7 +553,7 @@ def build_odp() -> None:
         bold=True,
     )
 
-    metric_y = 620
+    metric_y = 600
     for idx, (tag, body) in enumerate(
         [
             ("Physics", "Physical control rod motion tied to live\npoint-kinetics response."),
