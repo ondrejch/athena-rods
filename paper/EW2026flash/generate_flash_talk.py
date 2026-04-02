@@ -4,7 +4,9 @@ from __future__ import annotations
 import base64
 import mimetypes
 import os
+import shutil
 import subprocess
+import tempfile
 import textwrap
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -14,8 +16,8 @@ from odf.opendocument import OpenDocumentPresentation
 from odf.style import DrawingPageProperties, MasterPage, PageLayout, PageLayoutProperties, Style
 
 
-ROOT = Path("/home/o/git/athena-rods/paper/EW2026flash")
-POSTER_ROOT = Path("/home/o/git/athena-rods/paper/EW2026poster")
+ROOT = Path(__file__).resolve().parent
+POSTER_ROOT = ROOT.parent / "EW2026poster"
 ASSETS = POSTER_ROOT / "assets"
 
 SLIDE1_SVG = ROOT / "slide1.svg"
@@ -26,6 +28,7 @@ SLIDE1_PDF = ROOT / "slide1_page.pdf"
 SLIDE2_PDF = ROOT / "slide2_page.pdf"
 OUT_ODP = ROOT / "athena_rods_flash_talk.odp"
 OUT_PDF = ROOT / "athena_rods_flash_talk.pdf"
+OUT_PPTX = ROOT / "athena_rods_flash_talk.pptx"
 OUT_PREVIEW_PREFIX = ROOT / "athena_rods_flash_talk_preview"
 
 W, H = 1920, 1080
@@ -399,10 +402,10 @@ def px_to_font(px: float) -> int:
     return max(6, int(round(px * 0.5)))
 
 
-def build_odp() -> None:
+def new_presentation(prefix: str = "Flash") -> tuple[OpenDocumentPresentation, Style, MasterPage]:
     doc = OpenDocumentPresentation()
 
-    pagelayout = PageLayout(name="FlashLayout")
+    pagelayout = PageLayout(name=f"{prefix}Layout")
     doc.automaticstyles.addElement(pagelayout)
     pagelayout.addElement(
         PageLayoutProperties(
@@ -413,7 +416,7 @@ def build_odp() -> None:
         )
     )
 
-    slide_style = Style(name="FlashPage", family="drawing-page")
+    slide_style = Style(name=f"{prefix}Page", family="drawing-page")
     slide_style.addElement(
         DrawingPageProperties(
             displayfooter="false",
@@ -423,8 +426,14 @@ def build_odp() -> None:
     )
     doc.automaticstyles.addElement(slide_style)
 
-    masterpage = MasterPage(name="FlashMaster", pagelayoutname=pagelayout)
+    masterpage = MasterPage(name=f"{prefix}Master", pagelayoutname=pagelayout)
     doc.masterstyles.addElement(masterpage)
+
+    return doc, slide_style, masterpage
+
+
+def build_odp() -> None:
+    doc, slide_style, masterpage = new_presentation("Flash")
 
     gcache: dict[tuple[str | None, str | None, str], Style] = {}
     pcache: dict[str, Style] = {}
@@ -710,6 +719,84 @@ def build_odp() -> None:
     doc.save(str(OUT_ODP))
 
 
+def build_image_deck_odp(output_path: Path, slide_images: list[Path]) -> None:
+    doc, slide_style, masterpage = new_presentation("FlashImageDeck")
+
+    frame_no_fill = Style(name="ImageFrameNoFill", family="graphic")
+    frame_no_fill.addElement(style.GraphicProperties(fill="none", stroke="none"))
+    doc.automaticstyles.addElement(frame_no_fill)
+
+    for index, image_path in enumerate(slide_images, start=1):
+        page = draw.Page(name=f"page{index}", stylename=slide_style, masterpagename=masterpage)
+        doc.presentation.addElement(page)
+
+        frame = draw.Frame(
+            stylename=frame_no_fill,
+            x="0pt",
+            y="0pt",
+            width="960pt",
+            height="540pt",
+        )
+        href = doc.addPicture(str(image_path))
+        frame.addElement(draw.Image(href=href))
+        page.addElement(frame)
+
+    doc.save(str(output_path))
+
+
+def build_pptx() -> None:
+    slide_images = [SLIDE1_PNG, SLIDE2_PNG]
+
+    with tempfile.TemporaryDirectory(prefix="flash_talk_pptx_", dir=ROOT) as temp_dir_name:
+        temp_dir = Path(temp_dir_name)
+        temp_odp = temp_dir / OUT_PPTX.with_suffix(".odp").name
+        office_profile_dir = temp_dir / "lo_profile"
+        office_config_dir = temp_dir / "xdg_config"
+        office_cache_dir = temp_dir / "xdg_cache"
+        office_runtime_dir = temp_dir / "xdg_runtime"
+
+        office_profile_dir.mkdir()
+        office_config_dir.mkdir()
+        office_cache_dir.mkdir()
+        office_runtime_dir.mkdir(mode=0o700)
+
+        build_image_deck_odp(temp_odp, slide_images)
+
+        office_env = {
+            **TOOL_ENV,
+            "HOME": str(temp_dir),
+            "XDG_CONFIG_HOME": str(office_config_dir),
+            "XDG_CACHE_HOME": str(office_cache_dir),
+            "XDG_RUNTIME_DIR": str(office_runtime_dir),
+            "GSETTINGS_BACKEND": "memory",
+        }
+
+        subprocess.run(
+            [
+                "libreoffice",
+                "--headless",
+                f"-env:UserInstallation={office_profile_dir.resolve().as_uri()}",
+                "--nologo",
+                "--nodefault",
+                "--nofirststartwizard",
+                "--convert-to",
+                "pptx",
+                "--outdir",
+                str(temp_dir),
+                str(temp_odp),
+            ],
+            env=office_env,
+            check=True,
+        )
+
+        temp_pptx = temp_dir / OUT_PPTX.name
+        if not temp_pptx.exists():
+            raise FileNotFoundError(f"Expected PowerPoint export at {temp_pptx}")
+
+        OUT_PPTX.unlink(missing_ok=True)
+        shutil.move(str(temp_pptx), str(OUT_PPTX))
+
+
 def svg_to_pdf(svg_path: Path, pdf_path: Path) -> None:
     subprocess.run(
         [
@@ -763,6 +850,7 @@ def main() -> None:
     svg_to_png(SLIDE1_SVG, SLIDE1_PNG)
     svg_to_png(SLIDE2_SVG, SLIDE2_PNG)
 
+    build_pptx()
     build_odp()
     build_pdf()
     build_previews()
@@ -771,6 +859,7 @@ def main() -> None:
     print(f"Wrote {SLIDE2_SVG}")
     print(f"Wrote {SLIDE1_PNG}")
     print(f"Wrote {SLIDE2_PNG}")
+    print(f"Wrote {OUT_PPTX}")
     print(f"Wrote {OUT_ODP}")
     print(f"Wrote {OUT_PDF}")
 
